@@ -25,11 +25,41 @@ android {
         versionName = flutter.versionName
     }
 
+    // Production-ready signing: if a key.properties file exists at the project
+    // root (committed via CI secrets), use a real release keystore. Otherwise
+    // fall back to the debug key so local `flutter build apk --release` still works.
+    val keystorePropertiesFile = rootProject.file("key.properties")
+    val hasReleaseKey = keystorePropertiesFile.exists()
+    if (hasReleaseKey) {
+        val keystoreProperties =
+            java.util.Properties().apply { load(keystorePropertiesFile.inputStream()) }
+        signingConfigs {
+            create("release") {
+                keyAlias =
+                    keystoreProperties["keyAlias"] as String?
+                        ?: error("key.properties 缺少 keyAlias")
+                keyPassword =
+                    keystoreProperties["keyPassword"] as String?
+                        ?: error("key.properties 缺少 keyPassword")
+                val storeFilePath =
+                    keystoreProperties["storeFile"] as String?
+                        ?: error("key.properties 缺少 storeFile")
+                storeFile = file(storeFilePath)
+                storePassword =
+                    keystoreProperties["storePassword"] as String?
+                        ?: error("key.properties 缺少 storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig =
+                if (hasReleaseKey) {
+                    signingConfigs.getByName("release")
+                } else {
+                    signingConfigs.getByName("debug")
+                }
         }
     }
 }

@@ -26,74 +26,166 @@ class _PreviewScreenState extends State<PreviewScreen> {
   Timer? _focusTimer;
   int _configVersion = -1;
 
+  // Error stream subscription of the currently mounted Player. Cancelled on
+  // every rebuild / disposal so a stale listener never fires for an orphaned
+  // Player. (P2-11)
+  StreamSubscription<String>? _errorSub;
+
+  // Reconnection state (exponential backoff, max 5 attempts).
+  int _reconnectAttempts = 0;
+  bool _reconnecting = false;
+  static const int _maxReconnectAttempts = 5;
+
+  // Generation token: bumped on every _rebuildPlayer call so concurrent /
+  // superseded rebuilds can detect they are stale and bail out before touching
+  // shared state. (P1-2 / P1-3)
+  int _rebuildGen = 0;
+
   @override
   void initState() {
     super.initState();
+    context.read<CameraState>().addListener(_onStateChanged);
+    _initPlayerIfNeeded();
+  }
+
+  void _onStateChanged() => _initPlayerIfNeeded();
+
+  @override
+  void dispose() {
+    _focusTimer?.cancel();
+    context.read<CameraState>().removeListener(_onStateChanged);
+    _errorSub?.cancel();
+    _errorSub = null;
+    // Dispose the live Player. VideoController (media_kit_video 2.0.1) does not
+    // expose a public dispose(); its platform resources are released when the
+    // bound Player is disposed, so there is nothing else to tear down. (P2-12)
+    _player?.dispose();
+    _player = null;
+    _videoController = null;
+    super.dispose();
   }
 
   void _initPlayerIfNeeded() {
+    if (!mounted) return;
     final state = context.read<CameraState>();
     if (state.configVersion == _configVersion) return;
     _configVersion = state.configVersion;
-    _rebuildPlayer(state.config.rtspUrl);
+    // User-initiated rebuild (settings/config change): use the default
+    // isRetry = false so the reconnect counters are reset inside _rebuildPlayer.
+    unawaited(_rebuildPlayer(state.config.rtspUrl));
   }
 
-  Future<void> _rebuildPlayer(String rtspUrl) async {
+  /// Rebuilds the media_kit [Player] for [rtspUrl].
+  ///
+  /// [isRetry] distinguishes a user-initiated rebuild (config changed, which
+  /// must reset the reconnect counters) from an automatic reconnect attempt
+  /// (which must keep counting). (P0-1)
+  Future<void> _rebuildPlayer(String rtspUrl, {bool isRetry = false}) async {
+    final state = context.read<CameraState>();
+    final myGen = ++_rebuildGen;
+
+    // A user-initiated rebuild (config changed) clears reconnect counters so
+    // the stream gets a fresh set of attempts. Retries keep the running count.
+    if (!isRetry) {
+      _reconnectAttempts = 0;
+      _reconnecting = false;
+    }
+
     await _disposePlayer();
+
     final player = Player(
       configuration: PlayerConfiguration(
         osc: false,
       ),
     );
     final controller = VideoController(player);
-    if (!mounted) {
-      player.dispose();
+
+    // Guard (a): a newer rebuild started (or the widget was disposed) while we
+    // awaited disposal. Dispose the unused Player to avoid leaks.
+    if (myGen != _rebuildGen || !mounted) {
+      await player.dispose();
       return;
     }
+
     setState(() {
       _player = player;
       _videoController = controller;
       _playerReady = false;
     });
 
-    player.stream.error.listen((error) {
+    _errorSub = player.stream.error.listen((error) {
       debugPrint('Player error: $error');
-      if (mounted) {
-        context.read<CameraState>().setDisconnected();
-        setState(() => _playerReady = false);
-      }
+      // Ignore errors from a superseded / stale Player.
+      if (myGen != _rebuildGen || !mounted) return;
+      state.setDisconnected();
+      setState(() => _playerReady = false);
+      // Avoid scheduling duplicates while a reconnect is already pending.
+      if (!_reconnecting) _scheduleReconnect(state.config.rtspUrl);
     });
 
     try {
       await player.open(Media(rtspUrl));
       await player.setVolume(0);
-      if (mounted) {
-        context.read<CameraState>().setConnected();
-        context.read<CameraState>().setStreamInfo(
-              rtspUrl.contains('102') ? '子码流' : '主码流',
-            );
-        setState(() => _playerReady = true);
+      // Guard (b): a newer rebuild superseded this one while opening, or the
+      // widget was disposed. Dispose the now-orphaned Player to avoid leaks.
+      if (myGen != _rebuildGen || !mounted) {
+        // Only dispose if this is still the live Player; a newer rebuild (or
+        // widget.dispose) may have already disposed it — Player.dispose() is
+        // NOT idempotent and throws on a second call.
+        if (identical(player, _player)) {
+          await player.dispose();
+        }
+        return;
       }
+      _reconnectAttempts = 0;
+      _reconnecting = false;
+      state.setConnected();
+      state.setStreamInfo(
+        state.config.useSubStream ? '子码流' : '主码流',
+      );
+      setState(() => _playerReady = true);
     } catch (e) {
       debugPrint('Player open error: $e');
       if (mounted) {
-        context.read<CameraState>().setDisconnected();
+        state.setDisconnected();
         setState(() => _playerReady = false);
+        // Avoid scheduling duplicates while a reconnect is already pending.
+        if (!_reconnecting) _scheduleReconnect(state.config.rtspUrl);
       }
     }
   }
 
+  /// Schedule a reconnect with exponential backoff (1, 2, 4, 8, 16 s).
+  /// Gives up after [_maxReconnectAttempts] attempts. (P0-1)
+  void _scheduleReconnect(String rtspUrl) {
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      debugPrint('[Preview] Max reconnect attempts reached; giving up.');
+      // Reset the guard so a later user-initiated rebuild can retry instead of
+      // being permanently skipped (the previous deadlock: _reconnecting stuck
+      // true forever blocked every subsequent reconnect).
+      _reconnecting = false;
+      return;
+    }
+    final delay = Duration(seconds: 1 << _reconnectAttempts);
+    _reconnectAttempts++;
+    _reconnecting = true;
+    debugPrint('[Preview] Reconnect #$_reconnectAttempts in ${delay.inSeconds}s');
+    Future.delayed(delay, () {
+      if (mounted) {
+        unawaited(_rebuildPlayer(rtspUrl, isRetry: true));
+      }
+    });
+  }
+
   Future<void> _disposePlayer() async {
+    await _errorSub?.cancel();
+    _errorSub = null;
+    // VideoController (media_kit_video 2.0.1) does not expose a public
+    // dispose(); its platform resources are released when the bound Player is
+    // disposed, so we only dispose the Player here. (P2-12)
     await _player?.dispose();
     _player = null;
     _videoController = null;
-  }
-
-  @override
-  void dispose() {
-    _focusTimer?.cancel();
-    _player?.dispose();
-    super.dispose();
   }
 
   void _onTapPreview(TapDownDetails details, Size viewSize) {
@@ -125,10 +217,6 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Watch configVersion so we rebuild when config changes externally.
-    context.watch<CameraState>().configVersion;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initPlayerIfNeeded());
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: LayoutBuilder(

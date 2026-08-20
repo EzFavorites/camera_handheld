@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Camera Handheld — UI Mockup</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body {
+  background: #000;
+  font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Helvetica Neue", sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #fff;
+}
+.phone-frame {
+  width: 390px;
+  height: 844px;
+  background: #0a0a0a;
+  border-radius: 48px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px #222, 0 20px 60px rgba(0,0,0,0.8);
+}
+/* 预览画面 — 模拟 RTSP 流 */
+.preview {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 40%, #1a1a2e 0%, #0a0a0a 100%);
+  overflow: hidden;
+}
+/* 模拟画面内容 — 测试图案 */
+.preview::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 40px, rgba(255,255,255,0.015) 40px, rgba(255,255,255,0.015) 41px),
+    repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(255,255,255,0.015) 40px, rgba(255,255,255,0.015) 41px);
+}
+.preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    conic-gradient(from 0deg at 50% 50%, rgba(255,100,50,0.03), rgba(50,100,255,0.03), rgba(255,100,50,0.03));
+}
+/* 色卡测试图样 */
+.test-pattern {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  opacity: 0.25;
+}
+.test-pattern span {
+  flex: 0 0 25%;
+  height: 20%;
+}
+.test-pattern span:nth-child(1) { background: #fff; }
+.test-pattern span:nth-child(2) { background: #ff0; }
+.test-pattern span:nth-child(3) { background: #0ff; }
+.test-pattern span:nth-child(4) { background: #0f0; }
+.test-pattern span:nth-child(5) { background: #f0f; }
+.test-pattern span:nth-child(6) { background: #f00; }
+.test-pattern span:nth-child(7) { background: #00f; }
+.test-pattern span:nth-child(8) { background: #000; }
+.test-pattern span:nth-child(9) { background: #888; }
+.test-pattern span:nth-child(10) { background: #444; }
+.test-pattern span:nth-child(11) { background: #222; }
+.test-pattern span:nth-child(12) { background: #666; }
+.test-pattern span:nth-child(13) { background: #a00; }
+.test-pattern span:nth-child(14) { background: #0a0; }
+.test-pattern span:nth-child(15) { background: #00a; }
+.test-pattern span:nth-child(16) { background: #aa0; }
+.test-pattern span:nth-child(17) { background: #0aa; }
+.test-pattern span:nth-child(18) { background: #a0a; }
+.test-pattern span:nth-child(19) { background: #f80; }
+.test-pattern span:nth-child(20) { background: #80f; }
+
+/* 对焦框 */
+.focus-box {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: 1.5px solid rgba(255,255,255,0.7);
+  pointer-events: none;
+  opacity: 0.8;
+  transition: all 0.3s ease;
+}
+.focus-box::before, .focus-box::after {
+  content: '';
+  position: absolute;
+  background: rgba(255,255,255,0.7);
+}
+.focus-box::before {
+  top: -1px; left: 50%; width: 1px; height: 12px; margin-left: -0.5px;
+}
+.focus-box::after {
+  left: -1px; top: 50%; height: 1px; width: 12px; margin-top: -0.5px;
+}
+.focus-box .corner { position: absolute; width: 16px; height: 16px; border-color: rgba(255,255,255,0.7); border-style: solid; }
+.focus-box .corner.tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+.focus-box .corner.tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+.focus-box .corner.bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+.focus-box .corner.br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+/* 坐标标签 */
+.coord-label {
+  position: absolute;
+  bottom: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-family: "SF Mono", "Menlo", monospace;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0.5px;
+  background: rgba(0,0,0,0.6);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* 顶部状态区 */
+.top-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  padding: 16px 20px 12px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  z-index: 10;
+}
+.top-bar .title {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  opacity: 0.6;
+  text-transform: uppercase;
+}
+.top-bar .zoom-info {
+  font-size: 22px;
+  font-weight: 300;
+  font-family: "SF Mono", "Menlo", monospace;
+  letter-spacing: 1px;
+  text-align: right;
+}
+.top-bar .zoom-info .label {
+  font-size: 10px;
+  opacity: 0.4;
+  display: block;
+  margin-top: 2px;
+  letter-spacing: 2px;
+}
+
+/* 右侧变倍控制 */
+.zoom-controls {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 20;
+}
+.zoom-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.zoom-btn:active {
+  background: rgba(255,255,255,0.2);
+  transform: scale(0.92);
+}
+.zoom-btn span {
+  line-height: 1;
+}
+.zoom-track {
+  width: 2px;
+  height: 40px;
+  background: rgba(255,255,255,0.15);
+  margin: 2px 0;
+  position: relative;
+}
+.zoom-track .indicator {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.5);
+  transition: top 0.2s ease;
+}
+
+/* 底部快门 */
+.bottom-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 20px 20px 40px;
+  background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+.shutter-btn {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.8);
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.shutter-btn::after {
+  content: '';
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: #e03030;
+  transition: all 0.15s ease;
+}
+.shutter-btn:active {
+  transform: scale(0.92);
+}
+.shutter-btn:active::after {
+  background: #ff2020;
+}
+
+/* 底部状态栏 */
+.status-bar {
+  position: absolute;
+  bottom: 112px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  z-index: 10;
+}
+.status-item {
+  font-size: 10px;
+  font-family: "SF Mono", "Menlo", monospace;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0.5px;
+  padding: 4px 10px;
+  border: 0.5px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  background: rgba(0,0,0,0.3);
+}
+.status-item.active {
+  color: rgba(255,255,255,0.8);
+  border-color: rgba(255,255,255,0.2);
+}
+
+/* 底部提示 */
+.hint {
+  position: absolute;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 9px;
+  color: rgba(255,255,255,0.2);
+  letter-spacing: 1px;
+  z-index: 5;
+}
+
+/* 交互反馈 - 点击波纹 */
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.4);
+  pointer-events: none;
+  animation: rippleAnim 0.8s ease-out forwards;
+}
+@keyframes rippleAnim {
+  0% { width: 0; height: 0; opacity: 1; }
+  100% { width: 120px; height: 120px; opacity: 0; }
+}
+
+/* 点击坐标显示 */
+.tap-indicator {
+  position: absolute;
+  pointer-events: none;
+  z-index: 30;
+}
+.tap-crosshair {
+  position: absolute;
+  width: 20px; height: 20px;
+  transform: translate(-50%, -50%);
+}
+.tap-crosshair::before, .tap-crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(255,255,255,0.6);
+}
+.tap-crosshair::before {
+  top: 50%; left: 0; width: 100%; height: 1px;
+  transform: translateY(-50%);
+}
+.tap-crosshair::after {
+  left: 50%; top: 0; width: 1px; height: 100%;
+  transform: translateX(-50%);
+}
+.tap-coord {
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-family: "SF Mono", "Menlo", monospace;
+  color: rgba(255,255,255,0.6);
+  background: rgba(0,0,0,0.6);
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+</style>
+</head>
+<body>
+
+<div class="phone-frame">
+  <!-- 预览画面 -->
+  <div class="preview" id="previewArea">
+    <div class="test-pattern">
+      <span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span>
+    </div>
+
+    <!-- 对焦框 -->
+    <div class="focus-box" id="focusBox">
+      <span class="corner tl"></span>
+      <span class="corner tr"></span>
+      <span class="corner bl"></span>
+      <span class="corner br"></span>
+      <span class="coord-label" id="focusCoord">500, 500</span>
+    </div>
+  </div>
+
+  <!-- 顶部状态 -->
+  <div class="top-bar">
+    <div class="title">LIVE</div>
+    <div class="zoom-info">
+      2.5×
+      <span class="label">ZOOM</span>
+    </div>
+  </div>
+
+  <!-- 变倍控制 -->
+  <div class="zoom-controls" id="zoomControls">
+    <div class="zoom-btn" id="zoomIn">+</div>
+    <div class="zoom-track">
+      <div class="indicator" style="top: 30%;"></div>
+    </div>
+    <div class="zoom-btn" id="zoomOut">−</div>
+  </div>
+
+  <!-- 底部状态栏 -->
+  <div class="status-bar">
+    <span class="status-item active">AF</span>
+    <span class="status-item">2.5×</span>
+    <span class="status-item">H.265</span>
+    <span class="status-item">1080p</span>
+  </div>
+
+  <!-- 快门 -->
+  <div class="bottom-bar">
+    <div class="shutter-btn" id="shutterBtn"></div>
+  </div>
+
+  <div class="hint">点击预览画面设置对焦点 · 长按变倍连续调节</div>
+</div>
+
+<script>
+const previewArea = document.getElementById('previewArea');
+const focusBox = document.getElementById('focusBox');
+const focusCoord = document.getElementById('focusCoord');
+const zoomIn = document.getElementById('zoomIn');
+const zoomOut = document.getElementById('zoomOut');
+const shutterBtn = document.getElementById('shutterBtn');
+
+// 点击预览 → 对焦框 + 归一化坐标
+previewArea.addEventListener('click', function(e) {
+  const rect = this.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  // 归一化到 0-1000
+  const nx = Math.round((x / rect.width) * 1000);
+  const ny = Math.round((y / rect.height) * 1000);
+
+  // 移动对焦框
+  focusBox.style.left = (x / rect.width * 100) + '%';
+  focusBox.style.top = (y / rect.height * 100) + '%';
+  focusBox.style.transform = 'translate(-50%, -50%)';
+  focusBox.style.opacity = '1';
+  focusCoord.textContent = nx + ', ' + ny;
+
+  // 点击波纹
+  const ripple = document.createElement('div');
+  ripple.className = 'ripple';
+  ripple.style.left = (x - 60) + 'px';
+  ripple.style.top = (y - 60) + 'px';
+  this.appendChild(ripple);
+  setTimeout(() => ripple.remove(), 800);
+
+  // 2秒后对焦框淡出
+  clearTimeout(focusBox._timer);
+  focusBox._timer = setTimeout(() => {
+    focusBox.style.opacity = '0.3';
+  }, 2000);
+
+  console.log('Tap focus:', nx, ny);
+});
+
+// 变倍按钮交互
+let zoomTimer = null;
+function startZoom(direction) {
+  if (zoomTimer) return;
+  const btn = direction === 'in' ? zoomIn : zoomOut;
+  btn.style.background = 'rgba(255,255,255,0.2)';
+  zoomTimer = setInterval(() => {
+    console.log('Zoom', direction);
+  }, 100);
+}
+function stopZoom(direction) {
+  const btn = direction === 'in' ? zoomIn : zoomOut;
+  btn.style.background = '';
+  if (zoomTimer) {
+    clearInterval(zoomTimer);
+    zoomTimer = null;
+  }
+  console.log('Zoom stop');
+}
+
+zoomIn.addEventListener('mousedown', () => startZoom('in'));
+zoomIn.addEventListener('mouseup', () => stopZoom('in'));
+zoomIn.addEventListener('mouseleave', () => stopZoom('in'));
+zoomIn.addEventListener('touchstart', (e) => { e.preventDefault(); startZoom('in'); });
+zoomIn.addEventListener('touchend', (e) => { e.preventDefault(); stopZoom('in'); });
+
+zoomOut.addEventListener('mousedown', () => startZoom('out'));
+zoomOut.addEventListener('mouseup', () => stopZoom('out'));
+zoomOut.addEventListener('mouseleave', () => stopZoom('out'));
+zoomOut.addEventListener('touchstart', (e) => { e.preventDefault(); startZoom('out'); });
+zoomOut.addEventListener('touchend', (e) => { e.preventDefault(); stopZoom('out'); });
+
+// 快门
+shutterBtn.addEventListener('click', () => {
+  console.log('Capture!');
+  shutterBtn.style.transform = 'scale(0.85)';
+  setTimeout(() => shutterBtn.style.transform = '', 150);
+});
+</script>
+</body>
+</html>

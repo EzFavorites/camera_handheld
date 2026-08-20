@@ -8,7 +8,6 @@ class CameraConfig {
   final int port;
   final String username;
   final String password;
-  final int channel; // 101=main stream, 102=sub stream
   final bool useSubStream;
 
   const CameraConfig({
@@ -16,28 +15,50 @@ class CameraConfig {
     this.port = 554,
     this.username = 'admin',
     this.password = '',
-    this.channel = 102,
     this.useSubStream = true,
   });
 
   /// Build RTSP URL from config.
   /// Example: rtsp://admin:pass@192.168.1.64:554/Streaming/Channels/102
   String get rtspUrl {
-    final pass = password.isEmpty ? '' : ':${Uri.encodeComponent(password)}';
+    final user = Uri.encodeComponent(username);
+    final pass =
+        password.isEmpty ? '' : ':${Uri.encodeComponent(password)}';
     final ch = useSubStream ? 102 : 101;
-    return 'rtsp://${username}$pass@$ip:$port/Streaming/Channels/$ch';
+    return 'rtsp://$user$pass@$ip:$port/Streaming/Channels/$ch';
+  }
+
+  /// Masked RTSP URL for UI display: the password segment is replaced with
+  /// `:••••` so the secret is never shown in plaintext. (P1-5)
+  /// Example: rtsp://admin:••••@192.168.1.64:554/Streaming/Channels/102
+  String get rtspUrlMasked {
+    final user = Uri.encodeComponent(username);
+    final pass = password.isEmpty ? '' : ':••••';
+    final ch = useSubStream ? 102 : 101;
+    return 'rtsp://$user$pass@$ip:$port/Streaming/Channels/$ch';
   }
 
   /// Base HTTP URL for ISAPI (future use).
   /// Example: http://192.168.1.64:80
   String get httpUrl => 'http://$ip';
 
+  /// Full JSON, including the password. Intended for debugging / round-trip
+  /// only — never persist this to disk. (P2-13)
   Map<String, dynamic> toJson() => {
         'ip': ip,
         'port': port,
         'username': username,
         'password': password,
-        'channel': channel,
+        'useSubStream': useSubStream,
+      };
+
+  /// Persistable JSON, deliberately excluding the password. The password is
+  /// stored separately in flutter_secure_storage. Use this for persistence
+  /// instead of [toJson]. (P2-13)
+  Map<String, dynamic> toPersistableJson() => {
+        'ip': ip,
+        'port': port,
+        'username': username,
         'useSubStream': useSubStream,
       };
 
@@ -46,7 +67,6 @@ class CameraConfig {
         port: json['port'] as int? ?? 554,
         username: json['username'] as String? ?? 'admin',
         password: json['password'] as String? ?? '',
-        channel: json['channel'] as int? ?? 102,
         useSubStream: json['useSubStream'] as bool? ?? true,
       );
 
@@ -55,7 +75,6 @@ class CameraConfig {
     int? port,
     String? username,
     String? password,
-    int? channel,
     bool? useSubStream,
   }) =>
       CameraConfig(
@@ -63,7 +82,6 @@ class CameraConfig {
         port: port ?? this.port,
         username: username ?? this.username,
         password: password ?? this.password,
-        channel: channel ?? this.channel,
         useSubStream: useSubStream ?? this.useSubStream,
       );
 
@@ -76,9 +94,8 @@ class CameraConfig {
           port == other.port &&
           username == other.username &&
           password == other.password &&
-          channel == other.channel &&
           useSubStream == other.useSubStream;
 
   @override
-  int get hashCode => Object.hash(ip, port, username, password, channel, useSubStream);
+  int get hashCode => Object.hash(ip, port, username, password, useSubStream);
 }

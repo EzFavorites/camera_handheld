@@ -5,15 +5,12 @@ import '../core/camera_protocol.dart';
 /// Shared camera state, consumed by UI via Provider.
 class CameraState extends ChangeNotifier {
   final CameraProtocol protocol;
-  CameraConfig _config;
+  CameraConfig config;
 
-  CameraState({required this.protocol, required CameraConfig config})
-      : _config = config;
+  CameraState({required this.protocol, required this.config});
 
-  CameraConfig get config => _config;
   int _configVersion = 0;
   int get configVersion => _configVersion;
-
 
   double _zoomLevel = 1.0;
   double get zoomLevel => _zoomLevel;
@@ -38,9 +35,12 @@ class CameraState extends ChangeNotifier {
   Future<void> capture() async {
     _isCapturing = true;
     notifyListeners();
-    await protocol.capture();
-    _isCapturing = false;
-    notifyListeners();
+    try {
+      await protocol.capture();
+    } finally {
+      _isCapturing = false;
+      notifyListeners();
+    }
   }
 
   Future<void> zoomIn() async {
@@ -83,7 +83,7 @@ class CameraState extends ChangeNotifier {
   }
 
   void updateConfig(CameraConfig newConfig) {
-    _config = newConfig;
+    config = newConfig;
     _configVersion++;
     notifyListeners();
   }

@@ -40,7 +40,11 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
   Future<void> _rebuildPlayer(String rtspUrl) async {
     await _disposePlayer();
-    final player = Player();
+    final player = Player(
+      configuration: PlayerConfiguration(
+        osc: false,
+      ),
+    );
     final controller = VideoController(player);
     if (!mounted) {
       player.dispose();

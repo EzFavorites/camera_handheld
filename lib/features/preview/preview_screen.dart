@@ -6,6 +6,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/camera_config.dart';
+import '../../core/reconnect_policy.dart';
 import '../camera_state.dart';
 import '../capture/shutter_button.dart';
 import '../lens/zoom_controls.dart';
@@ -31,10 +32,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
   // Player. (P2-11)
   StreamSubscription<String>? _errorSub;
 
-  // Reconnection state (exponential backoff, max 5 attempts).
-  int _reconnectAttempts = 0;
+  // Reconnection state. Pure scheduling logic lives in [ReconnectPolicy].
+  final ReconnectPolicy _reconnectPolicy = ReconnectPolicy(maxAttempts: 5);
   bool _reconnecting = false;
-  static const int _maxReconnectAttempts = 5;
 
   // Generation token: bumped on every _rebuildPlayer call so concurrent /
   // superseded rebuilds can detect they are stale and bail out before touching
@@ -87,7 +87,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
     // A user-initiated rebuild (config changed) clears reconnect counters so
     // the stream gets a fresh set of attempts. Retries keep the running count.
     if (!isRetry) {
-      _reconnectAttempts = 0;
+      _reconnectPolicy.reset();
       _reconnecting = false;
     }
 
@@ -137,8 +137,8 @@ class _PreviewScreenState extends State<PreviewScreen> {
         }
         return;
       }
-      _reconnectAttempts = 0;
-      _reconnecting = false;
+      _reconnectPolicy.reset();
+      _reconnecting =  false;
       state.setConnected();
       state.setStreamInfo(
         state.config.useSubStream ? '子码流' : '主码流',
@@ -158,18 +158,14 @@ class _PreviewScreenState extends State<PreviewScreen> {
   /// Schedule a reconnect with exponential backoff (1, 2, 4, 8, 16 s).
   /// Gives up after [_maxReconnectAttempts] attempts. (P0-1)
   void _scheduleReconnect(String rtspUrl) {
-    if (_reconnectAttempts >= _maxReconnectAttempts) {
+    final delay = _reconnectPolicy.nextDelay();
+    if (delay == null) {
       debugPrint('[Preview] Max reconnect attempts reached; giving up.');
-      // Reset the guard so a later user-initiated rebuild can retry instead of
-      // being permanently skipped (the previous deadlock: _reconnecting stuck
-      // true forever blocked every subsequent reconnect).
       _reconnecting = false;
       return;
     }
-    final delay = Duration(seconds: 1 << _reconnectAttempts);
-    _reconnectAttempts++;
     _reconnecting = true;
-    debugPrint('[Preview] Reconnect #$_reconnectAttempts in ${delay.inSeconds}s');
+    debugPrint('[Preview] Reconnect #${_reconnectPolicy.attempts} in ${delay.inSeconds}s');
     Future.delayed(delay, () {
       if (mounted) {
         unawaited(_rebuildPlayer(rtspUrl, isRetry: true));

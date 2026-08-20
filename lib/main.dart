@@ -3,7 +3,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'app.dart';
 import 'core/camera_config_store.dart';
-import 'core/virtual_protocol.dart';
+import 'core/isapi_protocol.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,9 +12,9 @@ void main() async {
   // Load persisted camera config (IP, port, credentials, stream type).
   final config = await CameraConfigStore.load();
 
-  // Use VirtualProtocol for testing without hardware.
-  // Replace with IsapiProtocol when connecting to a real Hikvision camera.
-  final protocol = VirtualProtocol();
+  // Real control plane via Hikvision ISAPI (Digest auth over HTTP).
+  // VirtualProtocol remains available for offline/testing.
+  final protocol = IsapiProtocol(config: config);
 
   runApp(CameraApp(
     protocol: protocol,

@@ -229,6 +229,10 @@ class _PreviewScreenState extends State<PreviewScreen> {
                           controller: _videoController!,
                           fill: Colors.black,
                           fit: BoxFit.contain,
+                          // No built-in controls (progress bar / fullscreen / play-pause).
+                          // We only need the raw video surface; tap-to-focus is handled
+                          // by the surrounding GestureDetector.
+                          controls: null,
                         )
                       : _buildPlaceholder(),
                 ),
@@ -261,6 +265,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                       onZoomIn: () => state.zoomIn(),
                       onZoomOut: () => state.zoomOut(),
                       onZoomStop: () => state.zoomStop(),
+                      zoomTapDelayMs: state.config.zoomTapDelayMs,
                     ),
                   ),
                 ),

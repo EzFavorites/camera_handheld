@@ -9,6 +9,10 @@ class CameraConfig {
   final String username;
   final String password;
   final bool useSubStream;
+  /// Delay (ms) between a single-tap zoom start and the stop command.
+  /// A tap sends ZOOM start then stops; too short a gap and the camera won't
+  /// move. Default 60 ms. Configurable in settings.
+  final int zoomTapDelayMs;
 
   const CameraConfig({
     this.ip = '192.168.1.64',
@@ -16,6 +20,7 @@ class CameraConfig {
     this.username = 'admin',
     this.password = '',
     this.useSubStream = true,
+    this.zoomTapDelayMs = 60,
   });
 
   /// Build RTSP URL from config.
@@ -46,10 +51,11 @@ class CameraConfig {
   /// only — never persist this to disk. (P2-13)
   Map<String, dynamic> toJson() => {
         'ip': ip,
-        'port': port,
+        'port':  port,
         'username': username,
         'password': password,
         'useSubStream': useSubStream,
+        'zoomTapDelayMs': zoomTapDelayMs,
       };
 
   /// Persistable JSON, deliberately excluding the password. The password is
@@ -60,6 +66,7 @@ class CameraConfig {
         'port': port,
         'username': username,
         'useSubStream': useSubStream,
+        'zoomTapDelayMs': zoomTapDelayMs,
       };
 
   factory CameraConfig.fromJson(Map<String, dynamic> json) => CameraConfig(
@@ -68,6 +75,7 @@ class CameraConfig {
         username: json['username'] as String? ?? 'admin',
         password: json['password'] as String? ?? '',
         useSubStream: json['useSubStream'] as bool? ?? true,
+        zoomTapDelayMs: json['zoomTapDelayMs'] as int? ?? 60,
       );
 
   CameraConfig copyWith({
@@ -76,6 +84,7 @@ class CameraConfig {
     String? username,
     String? password,
     bool? useSubStream,
+    int? zoomTapDelayMs,
   }) =>
       CameraConfig(
         ip: ip ?? this.ip,
@@ -83,6 +92,7 @@ class CameraConfig {
         username: username ?? this.username,
         password: password ?? this.password,
         useSubStream: useSubStream ?? this.useSubStream,
+        zoomTapDelayMs: zoomTapDelayMs ?? this.zoomTapDelayMs,
       );
 
   @override
@@ -94,8 +104,9 @@ class CameraConfig {
           port == other.port &&
           username == other.username &&
           password == other.password &&
-          useSubStream == other.useSubStream;
+          useSubStream == other.useSubStream &&
+          zoomTapDelayMs == other.zoomTapDelayMs;
 
   @override
-  int get hashCode => Object.hash(ip, port, username, password, useSubStream);
+  int get hashCode => Object.hash(ip, port, username, password, useSubStream, zoomTapDelayMs);
 }

@@ -21,6 +21,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _portCtrl;
   late final TextEditingController _userCtrl;
   late final TextEditingController _passCtrl;
+  late final TextEditingController _zoomDelayCtrl;
   late bool _useSubStream;
   bool _obscurePassword = true;
   bool _saving = false;
@@ -32,6 +33,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _portCtrl = TextEditingController(text: widget.initialConfig.port.toString());
     _userCtrl = TextEditingController(text: widget.initialConfig.username);
     _passCtrl = TextEditingController(text: widget.initialConfig.password);
+    _zoomDelayCtrl =
+        TextEditingController(text: widget.initialConfig.zoomTapDelayMs.toString());
     _useSubStream = widget.initialConfig.useSubStream;
   }
 
@@ -41,6 +44,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _portCtrl.dispose();
     _userCtrl.dispose();
     _passCtrl.dispose();
+    _zoomDelayCtrl.dispose();
     super.dispose();
   }
 
@@ -51,6 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       username: _userCtrl.text.trim().isEmpty ? 'admin' : _userCtrl.text.trim(),
       password: _passCtrl.text,
       useSubStream: _useSubStream,
+      zoomTapDelayMs: int.tryParse(_zoomDelayCtrl.text.trim()) ?? 60,
     );
   }
 
@@ -129,6 +134,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _StreamSelector(
             useSubStream: _useSubStream,
             onChanged: (v) => setState(() => _useSubStream = v),
+          ),
+          const SizedBox(height: 32),
+          _SectionLabel(text: '变倍'),
+          const SizedBox(height: 8),
+          _TextField(
+            controller: _zoomDelayCtrl,
+            label: '单点变倍延时 (ms)',
+            hint: '60',
+            keyboardType: TextInputType.number,
           ),
           const SizedBox(height: 40),
           // Preview of generated RTSP URL

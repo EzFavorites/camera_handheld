@@ -1,13 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 /// Vertical zoom +/- buttons with track indicator.
 /// Long-press triggers continuous zoom, release stops.
+/// A quick tap sends a short zoom pulse: start immediately, then stop after
+/// [zoomTapDelayMs] so the camera has time to register the movement.
 /// Buttons show pressed-state feedback (highlight + scale) while held.
 class ZoomControls extends StatefulWidget {
   final VoidCallback onZoomIn;
   final VoidCallback onZoomOut;
   final VoidCallback onZoomStop;
   final double zoomLevel;
+  /// Delay (ms) between a single-tap zoom start and the stop command.
+  /// Too short a gap and the camera won't move. Config-driven, default 60 ms.
+  final int zoomTapDelayMs;
 
   const ZoomControls({
     super.key,
@@ -15,6 +22,7 @@ class ZoomControls extends StatefulWidget {
     required this.onZoomOut,
     required this.onZoomStop,
     required this.zoomLevel,
+    this.zoomTapDelayMs = 60,
   });
 
   @override
@@ -50,13 +58,6 @@ class _ZoomControlsState extends State<ZoomControls> {
   }
 
   @override
-  void dispose() {
-    _stopZoomIn();
-    _stopZoomOut();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final trackPercent = ((widget.zoomLevel - 1.0) / 31.0 * 100).clamp(0.0, 100.0);
 
@@ -65,12 +66,9 @@ class _ZoomControlsState extends State<ZoomControls> {
       children: [
         _ZoomButton(
           label: '+',
-          onPressed: () {
-            widget.onZoomIn();
-            widget.onZoomStop();
-          },
-          onLongPressStart: _startZoomIn,
-          onLongPressEnd: (_) => _stopZoomIn(),
+          onZoomStart: _startZoomIn,
+          onZoomStop: _stopZoomIn,
+          tapStopDelayMs: widget.zoomTapDelayMs,
         ),
         const SizedBox(height: 4),
         SizedBox(
@@ -101,12 +99,9 @@ class _ZoomControlsState extends State<ZoomControls> {
         const SizedBox(height: 4),
         _ZoomButton(
           label: '\u2212',
-          onPressed: () {
-            widget.onZoomOut();
-            widget.onZoomStop();
-          },
-          onLongPressStart: _startZoomOut,
-          onLongPressEnd: (_) => _stopZoomOut(),
+          onZoomStart: _startZoomOut,
+          onZoomStop: _stopZoomOut,
+          tapStopDelayMs: widget.zoomTapDelayMs,
         ),
       ],
     );
@@ -115,15 +110,15 @@ class _ZoomControlsState extends State<ZoomControls> {
 
 class _ZoomButton extends StatefulWidget {
   final String label;
-  final VoidCallback onPressed;
-  final VoidCallback onLongPressStart;
-  final void Function(LongPressEndDetails) onLongPressEnd;
+  final VoidCallback onZoomStart;
+  final VoidCallback onZoomStop;
+  final int tapStopDelayMs;
 
   const _ZoomButton({
     required this.label,
-    required this.onPressed,
-    required this.onLongPressStart,
-    required this.onLongPressEnd,
+    required this.onZoomStart,
+    required this.onZoomStop,
+    required this.tapStopDelayMs,
   });
 
   @override
@@ -132,11 +127,32 @@ class _ZoomButton extends StatefulWidget {
 
 class _ZoomButtonState extends State<_ZoomButton> {
   bool _isPressed = false;
+  Timer? _stopTimer;
 
   void _setPressed(bool value) {
     if (_isPressed != value) {
       setState(() => _isPressed = value);
     }
+  }
+
+  /// Quick tap -> start zoom now, schedule stop after the configured delay so
+  /// the camera has time to react. Long-press uses [onZoomStart]/[onZoomStop]
+  /// directly via [onLongPressStart]/[onLongPressEnd] and never schedules here.
+  void _onTap() {
+    widget.onZoomStart();
+    _stopTimer?.cancel();
+    _stopTimer = Timer(
+      Duration(milliseconds: widget.tapStopDelayMs),
+      () {
+        if (mounted) widget.onZoomStop();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _stopTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -145,14 +161,15 @@ class _ZoomButtonState extends State<_ZoomButton> {
       onTapDown: (_) => _setPressed(true),
       onTapUp: (_) => _setPressed(false),
       onTapCancel: () => _setPressed(false),
-      onTap: widget.onPressed,
+      onTap: _onTap,
       onLongPressStart: (_) {
         _setPressed(true);
-        widget.onLongPressStart();
+        widget.onZoomStart();
       },
-      onLongPressEnd: (details) {
+      onLongPressEnd: (_) {
+        _stopTimer?.cancel();
         _setPressed(false);
-        widget.onLongPressEnd(details);
+        widget.onZoomStop();
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),

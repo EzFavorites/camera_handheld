@@ -85,6 +85,7 @@ class CameraState extends ChangeNotifier {
   void updateConfig(CameraConfig newConfig) {
     config = newConfig;
     _configVersion++;
+    protocol.updateConfig(newConfig);
     notifyListeners();
   }
 

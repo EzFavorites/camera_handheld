@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import 'camera_config.dart';
 import 'camera_protocol.dart';
 
 /// Mock protocol implementation for testing without hardware.
@@ -28,6 +29,11 @@ class VirtualProtocol implements CameraProtocol {
   @override
   Future<void> focusAt(int x, int y) async {
     debugPrint('[VirtualProtocol] focusAt: ($x, $y)');
+  }
+
+  @override
+  void updateConfig(CameraConfig config) {
+    debugPrint('[VirtualProtocol] config updated: ${config.ip}');
   }
 
   @override

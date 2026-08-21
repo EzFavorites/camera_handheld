@@ -1,6 +1,8 @@
+import 'camera_config.dart';
+
 /// Abstract interface for camera protocol operations.
 /// VirtualProtocol implements this for testing.
-/// Future: IsapiProtocol implements this with real ISAPI HTTP calls.
+/// IsapiProtocol implements this with real ISAPI HTTP calls.
 abstract class CameraProtocol {
   /// Capture a still image from the camera.
   Future<void> capture();
@@ -16,6 +18,10 @@ abstract class CameraProtocol {
 
   /// Set focus point at normalized coordinates (0-1000).
   Future<void> focusAt(int x, int y);
+
+  /// Update the camera config (IP, credentials, etc.) at runtime.
+  /// Called when the user changes settings.
+  void updateConfig(CameraConfig config);
 
   /// Release all resources.
   void dispose();

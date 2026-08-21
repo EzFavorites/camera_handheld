@@ -314,32 +314,6 @@ class _PreviewScreenState extends State<PreviewScreen> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Consumer<CameraState>(
-                builder: (context, state, _) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${state.zoomLevel.toStringAsFixed(1)}\u00d7',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w300,
-                        fontFamily: 'SF Mono',
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    Text(
-                      'ZOOM',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.4),
-                        fontSize: 10,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
               // 设置齿轮入口
               GestureDetector(
                 onTap: _openSettings,

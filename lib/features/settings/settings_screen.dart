@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../core/camera_config.dart';
 import '../../core/camera_config_store.dart';
+import '../../core/init_command.dart';
+import '../../core/isapi_protocol.dart';
+import 'log_viewer_screen.dart';
 import '../camera_state.dart';
 
 /// Settings screen for camera connection configuration.
@@ -23,6 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _passCtrl;
   late final TextEditingController _zoomDelayCtrl;
   late bool _useSubStream;
+  late List<InitCommand> _initCommands;
   bool _obscurePassword = true;
   bool _saving = false;
 
@@ -36,6 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _zoomDelayCtrl =
         TextEditingController(text: widget.initialConfig.zoomTapDelayMs.toString());
     _useSubStream = widget.initialConfig.useSubStream;
+    _initCommands = List.of(widget.initialConfig.initCommands);
   }
 
   @override
@@ -56,18 +61,85 @@ class _SettingsScreenState extends State<SettingsScreen> {
       password: _passCtrl.text,
       useSubStream: _useSubStream,
       zoomTapDelayMs: int.tryParse(_zoomDelayCtrl.text.trim()) ?? 60,
+      initCommands: List.of(_initCommands),
     );
   }
 
   Future<void> _save() async {
     setState(() => _saving = true);
     final config = _buildConfig();
+
+    // Test connection with ISAPI before saving to avoid device lock.
+    try {
+      final error = await IsapiProtocol.testConnection(config);
+      if (error != null) {
+        if (mounted) {
+          setState(() => _saving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(error),
+              backgroundColor: Colors.red.shade800,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Connection test failed: $e'),
+            backgroundColor: Colors.red.shade800,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Connection successful — save config.
     await CameraConfigStore.save(config);
     if (mounted) {
-      // Push config into CameraState for the app to rebuild RTSP URL.
       context.read<CameraState>().updateConfig(config);
       Navigator.of(context).pop(config);
     }
+  }
+
+  List<Widget> _buildInitCommandEditor() {
+    final tiles = <Widget>[
+      for (var i = 0; i < _initCommands.length; i++)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: _InitCommandTile(
+            command: _initCommands[i],
+            onChanged: (updated) {
+              setState(() => _initCommands[i] = updated);
+            },
+            onDelete: () {
+              setState(() => _initCommands.removeAt(i));
+            },
+          ),
+        ),
+    ];
+    tiles.add(
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: () {
+            setState(() {
+              _initCommands.add(const InitCommand(name: '新命令'));
+            });
+          },
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('添加命令'),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white70,
+          ),
+        ),
+      ),
+    );
+    return tiles;
   }
 
   @override
@@ -145,6 +217,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             keyboardType: TextInputType.number,
           ),
           const SizedBox(height: 40),
+          _SectionLabel(text: '初始化命令'),
+          const SizedBox(height: 4),
+          Text(
+            '连接时自动发送，用于切换聚焦模式/降噪等。可添加 VISCA 或 ISAPI 指令。',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.35),
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ..._buildInitCommandEditor(),
+          const SizedBox(height: 12),
           // Preview of generated RTSP URL
           Container(
             padding: const EdgeInsets.all(12),
@@ -179,24 +263,78 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _saving ? null : _save,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const LogViewerScreen(),
+                  ),
+                );
+              },
+              icon: Icon(
+                Icons.terminal,
+                size: 16,
+                color: Colors.white.withValues(alpha: 0.5),
+              ),
+              label: const Text('查看日志'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white70,
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: _saving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('保存并连接'),
             ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              if (_saving)
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => setState(() => _saving = false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('取消'),
+                  ),
+                ),
+              if (_saving) const SizedBox(width: 12),
+              Expanded(
+                flex: _saving ? 2 : 1,
+                child: ElevatedButton(
+                  onPressed: _saving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: _saving
+                      ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            SizedBox(width: 8),
+                            Text('验证中...'),
+                          ],
+                        )
+                      : const Text('保存并连接'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -288,7 +426,10 @@ class _TextField extends StatelessWidget {
 class _StreamSelector extends StatelessWidget {
   final bool useSubStream;
   final ValueChanged<bool> onChanged;
-  const _StreamSelector({required this.useSubStream, required this.onChanged});
+  const _StreamSelector({
+    required this.useSubStream,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -374,4 +515,244 @@ class _StreamSelector extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Editable tile for a single init command in settings.
+class _InitCommandTile extends StatefulWidget {
+  final InitCommand command;
+  final ValueChanged<InitCommand> onChanged;
+  final VoidCallback onDelete;
+
+  const _InitCommandTile({
+    required this.command,
+    required this.onChanged,
+    required this.onDelete,
+  });
+
+  @override
+  State<_InitCommandTile> createState() => _InitCommandTileState();
+}
+
+class _InitCommandTileState extends State<_InitCommandTile> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _contentCtrl;
+  late final TextEditingController _pathCtrl;
+  late InitCommandType _type;
+  late String _method;
+  late bool _enabled;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.command.name);
+    _contentCtrl = TextEditingController(text: widget.command.content);
+    _pathCtrl = TextEditingController(text: widget.command.path);
+    _type = widget.command.type;
+    _method = widget.command.method;
+    _enabled = widget.command.enabled;
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _contentCtrl.dispose();
+    _pathCtrl.dispose();
+    super.dispose();
+  }
+
+  void _emit() {
+    widget.onChanged(InitCommand(
+      name: _nameCtrl.text.trim(),
+      type: _type,
+      method: _method,
+      path: _pathCtrl.text.trim(),
+      content: _contentCtrl.text,
+      enabled: _enabled,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isVisca = _type == InitCommandType.visca;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Switch(
+                value: _enabled,
+                onChanged: (v) {
+                  setState(() => _enabled = v);
+                  _emit();
+                },
+                activeColor: Colors.white70,
+                activeTrackColor: Colors.white24,
+                inactiveThumbColor: Colors.white38,
+                inactiveTrackColor: Colors.white10,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              Expanded(
+                child: TextField(
+                  controller: _nameCtrl,
+                  onChanged: (_) => _emit(),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: '命令名称',
+                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2)),
+                    filled: true,
+                    fillColor: Colors.transparent,
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                    enabled: _enabled,
+                  ),
+                  style: TextStyle(
+                    color: _enabled ? Colors.white70 : Colors.white30,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: widget.onDelete,
+                icon: Icon(
+                  Icons.delete_outline,
+                  size: 18,
+                  color: Colors.white.withValues(alpha: 0.3),
+                ),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              _typeChip('VISCA', InitCommandType.visca),
+              const SizedBox(width: 8),
+              _typeChip('ISAPI', InitCommandType.isapi),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (isVisca) ...[
+            _miniField(
+              controller: _contentCtrl,
+              hint: 'VISCA HEX (无空格，如 8101045707ff)',
+              onChanged: (_) => _emit(),
+            ),
+          ] else ...[
+            Row(
+              children: [
+                DropdownButton<String>(
+                  value: _method,
+                  onChanged: _enabled
+                      ? (v) {
+                          if (v != null) {
+                            setState(() => _method = v);
+                            _emit();
+                          }
+                        }
+                      : null,
+                  dropdownColor: const Color(0xFF1A1A1A),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  items: ['GET', 'POST', 'PUT']
+                      .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                      .toList(),
+                ),
+                Expanded(
+                  child: _miniField(
+                    controller: _pathCtrl,
+                    hint: 'ISAPI 路径 (如 /ISAPI/Image/channels/1/noiseReduce)',
+                    onChanged: (_) => _emit(),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _miniField(
+              controller: _contentCtrl,
+              hint: '请求体 (XML/JSON 文本)',
+              maxLines: 3,
+              onChanged: (_) => _emit(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _typeChip(String label, InitCommandType type) {
+    final selected = _type == type;
+    return GestureDetector(
+      onTap: _enabled
+          ? () {
+              setState(() => _type = type);
+              _emit();
+            }
+          : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: selected
+                ? Colors.white.withValues(alpha: 0.3)
+                : Colors.white.withValues(alpha: 0.1),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white70 : Colors.white30,
+            fontSize: 10,
+            letterSpacing: 1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _miniField({
+    required TextEditingController controller,
+    required String hint,
+    int maxLines = 1,
+    ValueChanged<String>? onChanged,
+  }) {
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      maxLines: maxLines,
+      enabled: _enabled,
+      style: TextStyle(
+        color: _enabled ? Colors.white70 : Colors.white30,
+        fontSize: 12,
+        fontFamily: _useMonoFont(controller) ? 'SF Mono' : null,
+      ),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: hint,
+        hintStyle: TextStyle(
+          color: Colors.white.withValues(alpha: 0.2),
+          fontSize: 11,
+        ),
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.05),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  bool _useMonoFont(TextEditingController controller) =>
+      controller == _contentCtrl && _type == InitCommandType.visca;
 }

@@ -17,7 +17,6 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
   final ScrollController _scroll = ScrollController();
   List<String> _lines = AppLog.snapshot();
   bool _stickToBottom = true;
-  final List<void Function(String)> _listeners = [];
 
   @override
   void initState() {

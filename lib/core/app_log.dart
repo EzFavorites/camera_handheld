@@ -14,7 +14,7 @@ class AppLog {
   /// Ring buffer of log entries.
   static final Queue<String> _entries = Queue<String>();
 
-  static const _listeners = <ValueChanged<String>>[];
+  static final List<ValueChanged<String>> _listeners = [];
 
   /// Returns a snapshot of all current log lines.
   static List<String> snapshot() => List.unmodifiable(_entries);

@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:camera_handheld/core/camera_protocol.dart';
 import 'package:camera_handheld/core/virtual_protocol.dart';
-import 'package:camera_handheld/core/camera_config.dart';
 
 void main() {
   group('VirtualProtocol', () {
@@ -40,7 +39,6 @@ void main() {
     });
 
     test('works with empty config', () {
-      const config = CameraConfig();
       // The protocol should work regardless of config
       expect(() => protocol.dispose(), returnsNormally);
     });

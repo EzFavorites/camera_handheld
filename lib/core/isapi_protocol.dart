@@ -30,9 +30,9 @@ class IsapiProtocol implements CameraProtocol {
 
   IsapiProtocol.withVisca({
     required this.config,
-    String? this._zoomInCmd,
-    String? this._zoomOutCmd,
-    String? this._zoomStopCmd,
+    this._zoomInCmd,
+    this._zoomOutCmd,
+    this._zoomStopCmd,
   });
 
   // ── Logging ─────────────────────────────────────────────────

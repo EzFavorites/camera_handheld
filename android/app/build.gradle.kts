@@ -31,22 +31,22 @@ android {
     val keystorePropertiesFile = rootProject.file("key.properties")
     val hasReleaseKey = keystorePropertiesFile.exists()
     if (hasReleaseKey) {
-        val keystoreProperties =
-            java.util.Properties().apply { load(keystorePropertiesFile.inputStream()) }
+        val keystoreProperties = java.util.Properties()
+        keystoreProperties.load(keystorePropertiesFile.inputStream())
         signingConfigs {
             create("release") {
                 keyAlias =
-                    keystoreProperties["keyAlias"] as String?
+                    keystoreProperties.getProperty("keyAlias")
                         ?: error("key.properties 缺少 keyAlias")
                 keyPassword =
-                    keystoreProperties["keyPassword"] as String?
+                    keystoreProperties.getProperty("keyPassword")
                         ?: error("key.properties 缺少 keyPassword")
                 val storeFilePath =
-                    keystoreProperties["storeFile"] as String?
+                    keystoreProperties.getProperty("storeFile")
                         ?: error("key.properties 缺少 storeFile")
                 storeFile = file(storeFilePath)
                 storePassword =
-                    keystoreProperties["storePassword"] as String?
+                    keystoreProperties.getProperty("storePassword")
                         ?: error("key.properties 缺少 storePassword")
             }
         }

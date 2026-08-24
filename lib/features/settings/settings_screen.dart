@@ -593,7 +593,7 @@ class _InitCommandTileState extends State<_InitCommandTile> {
                   setState(() => _enabled = v);
                   _emit();
                 },
-                activeColor: Colors.white70,
+                activeThumbColor: Colors.white70,
                 activeTrackColor: Colors.white24,
                 inactiveThumbColor: Colors.white38,
                 inactiveTrackColor: Colors.white10,

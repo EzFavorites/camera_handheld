@@ -3,7 +3,6 @@ import 'dart:math';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'app_log.dart';
@@ -31,12 +30,10 @@ class IsapiProtocol implements CameraProtocol {
 
   IsapiProtocol.withVisca({
     required this.config,
-    String? zoomInCmd,
-    String? zoomOutCmd,
-    String? zoomStopCmd,
-  })  : _zoomInCmd = zoomInCmd,
-        _zoomOutCmd = zoomOutCmd,
-        _zoomStopCmd = zoomStopCmd;
+    String? this._zoomInCmd,
+    String? this._zoomOutCmd,
+    String? this._zoomStopCmd,
+  });
 
   // ── Logging ─────────────────────────────────────────────────
 
@@ -263,11 +260,11 @@ class IsapiProtocol implements CameraProtocol {
     final cleanHex = viscaHex.replaceAll(' ', '');
     _log('sendVisca: $cleanHex');
     final payload = jsonEncode({
-      "version": 1,
-      "cmd": "visca_tran_jx",
-      "cmd_src": "visca",
-      "attri": [
-        {"key": "ViscaProcess", "val": cleanHex}
+      'version': 1,
+      'cmd': 'visca_tran_jx',
+      'cmd_src': 'visca',
+      'attri': [
+        {'key': 'ViscaProcess', 'val': cleanHex}
       ],
     });
 

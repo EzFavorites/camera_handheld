@@ -99,10 +99,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     // Connection successful — save config.
-    await CameraConfigStore.save(config);
-    if (mounted) {
-      context.read<CameraState>().updateConfig(config);
-      Navigator.of(context).pop(config);
+    try {
+      await CameraConfigStore.save(config);
+      if (mounted) {
+        context.read<CameraState>().updateConfig(config);
+        Navigator.of(context).pop(config);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Save failed: $e'),
+            backgroundColor: Colors.red.shade800,
+          ),
+        );
+      }
     }
   }
 

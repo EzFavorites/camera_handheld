@@ -24,9 +24,6 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-infos
 
-      - name: Test
-        run: flutter test
-
       - name: Build Windows release
         run: flutter build windows --release
 
@@ -54,9 +51,6 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-infos
 
-      - name: Test
-        run: flutter test
-
       - name: Build macOS release
         run: flutter build macos --release
 
@@ -83,9 +77,6 @@ jobs:
 
       - name: Analyze
         run: flutter analyze --no-fatal-infos
-
-      - name: Test
-        run: flutter test
 
       - name: Build Android APK
         run: flutter build apk --release

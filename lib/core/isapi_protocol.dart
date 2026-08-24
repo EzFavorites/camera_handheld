@@ -297,9 +297,11 @@ class IsapiProtocol implements CameraProtocol {
     _log('Initializing camera...');
 
     try {
-      // Execute user-configured init commands from CameraConfig.
-      for (final cmd in config.initCommands) {
+      for (var i = 0; i < config.initCommands.length; i++) {
+        final cmd = config.initCommands[i];
         if (!cmd.enabled) continue;
+        // 间隔 0.5s 发送，避免设备处理不过来
+        if (i > 0) await Future.delayed(const Duration(milliseconds: 500));
         switch (cmd.type) {
           case InitCommandType.visca:
             final result = await _sendVisca(cmd.content);

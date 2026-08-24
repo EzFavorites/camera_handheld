@@ -59,14 +59,21 @@ class CameraConfig {
       };
 
   factory CameraConfig.fromJson(Map<String, dynamic> json) => CameraConfig(
-        ip: json['ip'] as String? ?? '192.168.1.64',
-        port: json['port'] as int? ?? 554,
-        username: json['username'] as String? ?? 'admin',
-        password: json['password'] as String? ?? '',
-        useSubStream: json['useSubStream'] as bool? ?? true,
-        zoomTapDelayMs: json['zoomTapDelayMs'] as int? ?? 60,
+        ip: json['ip'] is String ? json['ip'] as String : '192.168.1.64',
+        port: _toInt(json['port'], 554),
+        username: json['username'] is String ? json['username'] as String : 'admin',
+        password: json['password'] is String ? json['password'] as String : '',
+        useSubStream: json['useSubStream'] is bool ? json['useSubStream'] as bool : true,
+        zoomTapDelayMs: _toInt(json['zoomTapDelayMs'], 60),
         initCommands: _parseInitCommands(json['initCommands']),
       );
+
+  static int _toInt(dynamic value, [int fallback = 554]) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
+    return fallback;
+  }
 
   static List<InitCommand> _parseInitCommands(dynamic raw) {
     if (raw is! List || raw.isEmpty) return InitCommand.defaults;

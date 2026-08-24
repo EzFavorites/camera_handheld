@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -15,10 +17,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.camera.camera_handheld"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -31,7 +30,7 @@ android {
     val keystorePropertiesFile = rootProject.file("key.properties")
     val hasReleaseKey = keystorePropertiesFile.exists()
     if (hasReleaseKey) {
-        val keystoreProperties = java.util.Properties()
+        val keystoreProperties = Properties()
         keystoreProperties.load(keystorePropertiesFile.inputStream())
         signingConfigs {
             create("release") {

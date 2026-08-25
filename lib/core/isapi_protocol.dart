@@ -402,6 +402,8 @@ class IsapiProtocol implements CameraProtocol {
     _isLocked = false;
     _initialized = false;
     _log('Config updated: ${config.ip}, user=${config.username}, pwd=${config.password.isEmpty ? "(empty)" : "(set)"}');
+    // 保存配置后立即在后台发送初始化指令（fire-and-forget，走串行队列，不阻塞 UI）
+    _initIfNeeded().catchError((e) => _log('post-save init failed: $e'));
   }
 
   @override

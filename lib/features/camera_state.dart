@@ -46,17 +46,18 @@ class CameraState extends ChangeNotifier {
   Future<void> zoomIn() async {
     _zoomLevel = (_zoomLevel + 0.1).clamp(1.0, 32.0);
     notifyListeners();
-    await protocol.zoomIn();
+    // Fire-and-forget: command queue handles serialization, errors logged not thrown
+    protocol.zoomIn().catchError((e) => debugPrint('[CameraState] zoomIn error: $e'));
   }
 
   Future<void> zoomOut() async {
     _zoomLevel = (_zoomLevel - 0.1).clamp(1.0, 32.0);
     notifyListeners();
-    await protocol.zoomOut();
+    protocol.zoomOut().catchError((e) => debugPrint('[CameraState] zoomOut error: $e'));
   }
 
   Future<void> zoomStop() async {
-    await protocol.zoomStop();
+    protocol.zoomStop().catchError((e) => debugPrint('[CameraState] zoomStop error: $e'));
   }
 
   Future<void> focusAt(int x, int y) async {

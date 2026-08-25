@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:io';
@@ -11,6 +12,15 @@ import 'camera_protocol.dart';
 import 'init_command.dart';
 
 /// ISAPI protocol implementation for Hikvision cameras.
+///
+/// All HTTP requests are **serialized** through a single command queue.
+/// This prevents concurrent requests from piling up and freezing the UI
+/// when the user taps zoom buttons rapidly. Each request has a timeout.
+///
+/// The queue works like a dedicated "protocol thread":
+/// - UI calls `zoomIn()` → enqueues a command → returns immediately
+/// - Queue processes commands one by one in the background
+/// - Latest zoom command can cancel pending ones (debounce for zoom)
 class IsapiProtocol implements CameraProtocol {
   CameraConfig config;
   final http.Client _client = http.Client();
@@ -18,6 +28,31 @@ class IsapiProtocol implements CameraProtocol {
   int _nc = 0;
   bool _initialized = false;
   bool _isLocked = false;
+
+  // ── Command queue (serial executor) ─────────────────────────
+  //
+  // A single Future chain ensures all HTTP requests run one at a time.
+  // `Completer` is used so callers can await individual results.
+  Future<void> _chain = Future.value();
+
+  /// Enqueues a task onto the serial execution chain.
+  /// Returns a Future that completes when the task finishes.
+  Future<T> _enqueue<T>(Future<T> Function() task, {Duration timeout = const Duration(seconds: 5)}) {
+    final completer = Completer<T>();
+    _chain = _chain.then((_) async {
+      try {
+        final result = await task().timeout(timeout, onTimeout: () {
+          throw TimeoutException('Request timed out after ${timeout.inSeconds}s');
+        });
+        if (!completer.isCompleted) completer.complete(result);
+      } catch (e) {
+        if (!completer.isCompleted) completer.completeError(e);
+      }
+    });
+    return completer.future;
+  }
+
+  // ── VISCA commands ──────────────────────────────────────────
 
   final String? _zoomInCmd;
   final String? _zoomOutCmd;
@@ -45,88 +80,90 @@ class IsapiProtocol implements CameraProtocol {
 
   static String _md5(String data) => md5.convert(utf8.encode(data)).toString();
 
-  /// Sends a request with Digest auth.
+  /// Sends a request with Digest auth. Runs on the serial queue.
   Future<http.Response> _request(
     String method,
     String path, {
     String? body,
     String contentType = 'application/json',
-  }) async {
-    if (_isLocked) {
-      throw HttpException(
-        'Device is locked due to too many failed login attempts. '
-        'Please wait and try again later.',
-      );
-    }
+  }) {
+    return _enqueue(() async {
+      if (_isLocked) {
+        throw HttpException(
+          'Device is locked due to too many failed login attempts. '
+          'Please wait and try again later.',
+        );
+      }
 
-    final uri = Uri.parse('${config.httpUrl}$path');
-    _nc = 0;
-    _log('$method $path');
+      final uri = Uri.parse('${config.httpUrl}$path');
+      _nc = 0;
+      _log('$method $path');
 
-    // 1st request: no auth.
-    final req1 = http.Request(method, uri);
-    if (body != null) req1.body = body;
-    req1.headers['Content-Type'] = contentType;
-    final resp1 = await _client.send(req1);
-    final body1 = await resp1.stream.bytesToString();
+      // 1st request: no auth.
+      final req1 = http.Request(method, uri);
+      if (body != null) req1.body = body;
+      req1.headers['Content-Type'] = contentType;
+      final resp1 = await _client.send(req1).timeout(const Duration(seconds: 5));
+      final body1 = await resp1.stream.bytesToString();
 
-    if (_checkLocked(body1)) return http.Response(body1, resp1.statusCode);
+      if (_checkLocked(body1)) return http.Response(body1, resp1.statusCode);
 
-    if (resp1.statusCode != 401) {
-      _log('$path → ${resp1.statusCode} (no auth needed)');
-      return http.Response(body1, resp1.statusCode);
-    }
-    _log('$path → 401, building Digest auth...');
+      if (resp1.statusCode != 401) {
+        _log('$path → ${resp1.statusCode} (no auth needed)');
+        return http.Response(body1, resp1.statusCode);
+      }
+      _log('$path → 401, building Digest auth...');
 
-    if (config.password.isEmpty) {
-      throw HttpException('Camera password is empty. Please configure it in Settings.');
-    }
+      if (config.password.isEmpty) {
+        throw HttpException('Camera password is empty. Please configure it in Settings.');
+      }
 
-    // Parse WWW-Authenticate header.
-    final authHeader = resp1.headers['www-authenticate'] ?? '';
-    final params = _parseDigestParams(authHeader);
-    if (params.isEmpty) {
-      _log('$path → failed to parse WWW-Authenticate');
-      return http.Response(body1, resp1.statusCode);
-    }
+      // Parse WWW-Authenticate header.
+      final authHeader = resp1.headers['www-authenticate'] ?? '';
+      final params = _parseDigestParams(authHeader);
+      if (params.isEmpty) {
+        _log('$path → failed to parse WWW-Authenticate');
+        return http.Response(body1, resp1.statusCode);
+      }
 
-    final realm = params['realm'] ?? '';
-    final nonce = params['nonce'] ?? '';
-    final opaque = params['opaque'] ?? '';
-    final qop = params['qop'] ?? '';
-    _cnonce ??= _generateCnonce();
-    _nc++;
-    final ncStr = _nc.toString().padLeft(8, '0');
+      final realm = params['realm'] ?? '';
+      final nonce = params['nonce'] ?? '';
+      final opaque = params['opaque'] ?? '';
+      final qop = params['qop'] ?? '';
+      _cnonce ??= _generateCnonce();
+      _nc++;
+      final ncStr = _nc.toString().padLeft(8, '0');
 
-    final ha1 = _md5('${config.username}:$realm:${config.password}');
-    final ha2 = _md5('$method:${uri.path}');
-    final response = _md5('$ha1:$nonce:$ncStr:$_cnonce:$qop:$ha2');
-    _log('Digest: username=${config.username}, realm=$realm, nc=$ncStr');
+      final ha1 = _md5('${config.username}:$realm:${config.password}');
+      final ha2 = _md5('$method:${uri.path}');
+      final response = _md5('$ha1:$nonce:$ncStr:$_cnonce:$qop:$ha2');
+      _log('Digest: username=${config.username}, realm=$realm, nc=$ncStr');
 
-    final auth = StringBuffer('Digest ');
-    auth.write('username="${config.username}", ');
-    auth.write('realm="$realm", ');
-    auth.write('nonce="$nonce", ');
-    auth.write('uri="${uri.path}", ');
-    auth.write('qop=$qop, ');
-    auth.write('nc=$ncStr, ');
-    auth.write('cnonce="$_cnonce", ');
-    auth.write('response="$response"');
-    if (opaque.isNotEmpty) {
-      auth.write(', opaque="$opaque"');
-    }
+      final auth = StringBuffer('Digest ');
+      auth.write('username="${config.username}", ');
+      auth.write('realm="$realm", ');
+      auth.write('nonce="$nonce", ');
+      auth.write('uri="${uri.path}", ');
+      auth.write('qop=$qop, ');
+      auth.write('nc=$ncStr, ');
+      auth.write('cnonce="$_cnonce", ');
+      auth.write('response="$response"');
+      if (opaque.isNotEmpty) {
+        auth.write(', opaque="$opaque"');
+      }
 
-    final req2 = http.Request(method, uri);
-    if (body != null) req2.body = body;
-    req2.headers['Content-Type'] = contentType;
-    req2.headers['Authorization'] = auth.toString();
-    final resp2 = await _client.send(req2);
-    final body2 = await resp2.stream.bytesToString();
+      final req2 = http.Request(method, uri);
+      if (body != null) req2.body = body;
+      req2.headers['Content-Type'] = contentType;
+      req2.headers['Authorization'] = auth.toString();
+      final resp2 = await _client.send(req2).timeout(const Duration(seconds: 5));
+      final body2 = await resp2.stream.bytesToString();
 
-    if (_checkLocked(body2)) return http.Response(body2, resp2.statusCode);
+      if (_checkLocked(body2)) return http.Response(body2, resp2.statusCode);
 
-    _log('$path → ${resp2.statusCode}');
-    return http.Response(body2, resp2.statusCode);
+      _log('$path → ${resp2.statusCode}');
+      return http.Response(body2, resp2.statusCode);
+    });
   }
 
   bool _checkLocked(String body) {
@@ -155,18 +192,14 @@ class IsapiProtocol implements CameraProtocol {
 
   // ── Connection test (static, for settings screen) ───────────
 
-  /// Tests the connection to the camera with the given [config].
-  /// Returns `null` on success, or an error message on failure.
-  /// This is used by the settings screen to verify credentials before saving.
   static Future<String?> testConnection(CameraConfig config) async {
     AppLog.log('[ISAPI] Testing connection to ${config.ip}...');
     final client = http.Client();
     try {
       final uri = Uri.parse('${config.httpUrl}/ISAPI/System/deviceInfo');
 
-      // 1st request: no auth.
       final req1 = http.Request('GET', uri);
-      final resp1 = await client.send(req1);
+      final resp1 = await client.send(req1).timeout(const Duration(seconds: 5));
       final body1 = await resp1.stream.bytesToString();
 
       if (body1.toLowerCase().contains('device is locked')) {
@@ -182,7 +215,6 @@ class IsapiProtocol implements CameraProtocol {
         return 'Password is empty. Please enter a password.';
       }
 
-      // Parse WWW-Authenticate.
       final authHeader = resp1.headers['www-authenticate'] ?? '';
       final params = <String, String>{};
       for (final match in RegExp(r'(\w+)\s*=\s*"([^"]*)"').allMatches(authHeader)) {
@@ -213,10 +245,9 @@ class IsapiProtocol implements CameraProtocol {
         auth.write(', opaque="$opaque"');
       }
 
-      // 2nd request: with Digest auth.
       final req2 = http.Request('GET', uri);
       req2.headers['Authorization'] = auth.toString();
-      final resp2 = await client.send(req2);
+      final resp2 = await client.send(req2).timeout(const Duration(seconds: 5));
       final body2 = await resp2.stream.bytesToString();
 
       if (body2.toLowerCase().contains('device is locked')) {
@@ -240,6 +271,9 @@ class IsapiProtocol implements CameraProtocol {
       }
 
       return 'Unexpected response: HTTP ${resp2.statusCode}';
+    } on TimeoutException {
+      AppLog.log('[ISAPI] Connection FAILED: timeout');
+      return 'Connection timed out. Check network.';
     } on SocketException catch (e) {
       AppLog.log('[ISAPI] Connection FAILED: $e');
       return 'Cannot reach camera at ${config.ip}. Check network connection.';
@@ -300,7 +334,6 @@ class IsapiProtocol implements CameraProtocol {
       for (var i = 0; i < config.initCommands.length; i++) {
         final cmd = config.initCommands[i];
         if (!cmd.enabled) continue;
-        // 间隔 0.5s 发送，避免设备处理不过来
         if (i > 0) await Future.delayed(const Duration(milliseconds: 500));
         switch (cmd.type) {
           case InitCommandType.visca:

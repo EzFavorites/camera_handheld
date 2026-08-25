@@ -41,10 +41,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
   // shared state. (P1-2 / P1-3)
   int _rebuildGen = 0;
 
+  CameraState? _cameraState;
+
   @override
   void initState() {
     super.initState();
-    context.read<CameraState>().addListener(_onStateChanged);
+    _cameraState = context.read<CameraState>();
+    _cameraState!.addListener(_onStateChanged);
     _initPlayerIfNeeded();
   }
 
@@ -53,7 +56,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
   @override
   void dispose() {
     _focusTimer?.cancel();
-    context.read<CameraState>().removeListener(_onStateChanged);
+    _cameraState?.removeListener(_onStateChanged);
     _errorSub?.cancel();
     _errorSub = null;
     // Dispose the live Player. VideoController (media_kit_video 2.0.1) does not
@@ -185,6 +188,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
   }
 
   void _onTapPreview(TapDownDetails details, Size viewSize) {
+    // Guard against zero-size window (minimized/initial layout): division would
+    // produce Infinity/NaN and round() would throw, crashing the app. (P2-16)
+    if (viewSize.width <= 0 || viewSize.height <= 0) return;
     final x = (details.localPosition.dx / viewSize.width * 1000).round();
     final y = (details.localPosition.dy / viewSize.height * 1000).round();
     context.read<CameraState>().focusAt(x, y);

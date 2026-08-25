@@ -37,6 +37,8 @@ class CameraState extends ChangeNotifier {
     notifyListeners();
     try {
       await protocol.capture();
+    } catch (e) {
+      debugPrint('[CameraState] capture error: $e');
     } finally {
       _isCapturing = false;
       notifyListeners();
@@ -65,7 +67,11 @@ class CameraState extends ChangeNotifier {
     _focusY = y.clamp(0, 1000);
     _showFocus = true;
     notifyListeners();
-    await protocol.focusAt(_focusX, _focusY);
+    try {
+      await protocol.focusAt(_focusX, _focusY);
+    } catch (e) {
+      debugPrint('[CameraState] focusAt error: $e');
+    }
   }
 
   void hideFocus() {

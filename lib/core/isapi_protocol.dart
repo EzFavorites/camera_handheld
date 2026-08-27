@@ -1,14 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 import 'app_log.dart';
 import 'camera_config.dart';
 import 'camera_protocol.dart';
+import 'digest_auth.dart';
 import 'init_command.dart';
 
 /// ISAPI protocol implementation for Hikvision cameras.
@@ -78,8 +77,6 @@ class IsapiProtocol implements CameraProtocol {
 
   // ── Digest auth ─────────────────────────────────────────────
 
-  static String _md5(String data) => md5.convert(utf8.encode(data)).toString();
-
   /// Sends a request with Digest auth. Runs on the serial queue.
   Future<http.Response> _request(
     String method,
@@ -120,37 +117,25 @@ class IsapiProtocol implements CameraProtocol {
 
       // Parse WWW-Authenticate header.
       final authHeader = resp1.headers['www-authenticate'] ?? '';
-      final params = _parseDigestParams(authHeader);
+      final params = DigestAuth.parseParams(authHeader);
       if (params.isEmpty) {
         _log('$path → failed to parse WWW-Authenticate');
         return http.Response(body1, resp1.statusCode);
       }
 
       final realm = params['realm'] ?? '';
-      final nonce = params['nonce'] ?? '';
-      final opaque = params['opaque'] ?? '';
-      final qop = params['qop'] ?? '';
-      _cnonce ??= _generateCnonce();
+      _cnonce ??= DigestAuth.generateCnonce();
       _nc++;
       final ncStr = _nc.toString().padLeft(8, '0');
-
-      final ha1 = _md5('${config.username}:$realm:${config.password}');
-      final ha2 = _md5('$method:${uri.path}');
-      final response = _md5('$ha1:$nonce:$ncStr:$_cnonce:$qop:$ha2');
       _log('Digest: username=${config.username}, realm=$realm, nc=$ncStr');
 
-      final auth = StringBuffer('Digest ');
-      auth.write('username="${config.username}", ');
-      auth.write('realm="$realm", ');
-      auth.write('nonce="$nonce", ');
-      auth.write('uri="${uri.path}", ');
-      auth.write('qop=$qop, ');
-      auth.write('nc=$ncStr, ');
-      auth.write('cnonce="$_cnonce", ');
-      auth.write('response="$response"');
-      if (opaque.isNotEmpty) {
-        auth.write(', opaque="$opaque"');
-      }
+      final auth = DigestAuth(username: config.username, password: config.password).buildHeader(
+        method: method,
+        uriPath: uri.path,
+        params: params,
+        cnonce: _cnonce!,
+        nc: _nc,
+      );
 
       final req2 = http.Request(method, uri);
       if (body != null) req2.body = body;
@@ -173,21 +158,6 @@ class IsapiProtocol implements CameraProtocol {
       return true;
     }
     return false;
-  }
-
-  Map<String, String> _parseDigestParams(String header) {
-    final params = <String, String>{};
-    final h = header.replaceFirst(RegExp(r'^Digest\s+', caseSensitive: false), '');
-    for (final match in RegExp(r'(\w+)\s*=\s*"([^"]*)"').allMatches(h)) {
-      params[match.group(1)!] = match.group(2)!;
-    }
-    return params;
-  }
-
-  String _generateCnonce() {
-    final rng = Random.secure();
-    final bytes = List<int>.generate(8, (_) => rng.nextInt(256));
-    return base64Encode(bytes);
   }
 
   // ── Connection test (static, for settings screen) ───────────
@@ -216,34 +186,15 @@ class IsapiProtocol implements CameraProtocol {
       }
 
       final authHeader = resp1.headers['www-authenticate'] ?? '';
-      final params = <String, String>{};
-      for (final match in RegExp(r'(\w+)\s*=\s*"([^"]*)"').allMatches(authHeader)) {
-        params[match.group(1)!] = match.group(2)!;
-      }
+      final params = DigestAuth.parseParams(authHeader);
 
-      final realm = params['realm'] ?? '';
-      final nonce = params['nonce'] ?? '';
-      final opaque = params['opaque'] ?? '';
-      final qop = params['qop'] ?? '';
-      final cnonce = base64Encode(List<int>.generate(8, (_) => Random.secure().nextInt(256)));
-      const nc = '00000001';
-
-      final ha1 = _md5('${config.username}:$realm:${config.password}');
-      final ha2 = _md5('GET:/ISAPI/System/deviceInfo');
-      final response = _md5('$ha1:$nonce:$nc:$cnonce:$qop:$ha2');
-
-      final auth = StringBuffer('Digest ');
-      auth.write('username="${config.username}", ');
-      auth.write('realm="$realm", ');
-      auth.write('nonce="$nonce", ');
-      auth.write('uri="/ISAPI/System/deviceInfo", ');
-      auth.write('qop=$qop, ');
-      auth.write('nc=$nc, ');
-      auth.write('cnonce="$cnonce", ');
-      auth.write('response="$response"');
-      if (opaque.isNotEmpty) {
-        auth.write(', opaque="$opaque"');
-      }
+      final auth = DigestAuth(username: config.username, password: config.password).buildHeader(
+        method: 'GET',
+        uriPath: '/ISAPI/System/deviceInfo',
+        params: params,
+        cnonce: DigestAuth.generateCnonce(),
+        nc: 1,
+      );
 
       final req2 = http.Request('GET', uri);
       req2.headers['Authorization'] = auth.toString();

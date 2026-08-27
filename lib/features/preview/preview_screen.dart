@@ -10,6 +10,7 @@ import '../../core/reconnect_policy.dart';
 import '../camera_state.dart';
 import '../capture/shutter_button.dart';
 import '../lens/zoom_controls.dart';
+import '../ptz/ptz_controls.dart';
 import '../settings/settings_screen.dart';
 import 'focus_overlay.dart';
 
@@ -286,6 +287,40 @@ class _PreviewScreenState extends State<PreviewScreen> {
                     onCapture: () => state.capture(),
                     isCapturing: state.isCapturing,
                   ),
+                ),
+              ),
+
+              // ── 云台控制盘（启用时显示，左下角）──
+              Positioned(
+                bottom: 40,
+                left: 20,
+                child: Consumer<CameraState>(
+                  builder: (context, state, _) {
+                    if (!state.config.ptz.enabled) return const SizedBox.shrink();
+                    return PtzControls(
+                      enabled: true,
+                      tapStopDelayMs: state.config.zoomTapDelayMs,
+                      onMove: (dir) {
+                        final ptz = state.ptzProtocol;
+                        if (ptz == null) return;
+                        switch (dir) {
+                          case PtzDirection.up:
+                            ptz.up();
+                          case PtzDirection.down:
+                            ptz.down();
+                          case PtzDirection.left:
+                            ptz.left();
+                          case PtzDirection.right:
+                            ptz.right();
+                        }
+                      },
+                      onStop: () {
+                        state.ptzProtocol?.stop().catchError((e) {
+                          debugPrint('[Preview] ptz stop error: $e');
+                        });
+                      },
+                    );
+                  },
                 ),
               ),
             ],

@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/app_log.dart';
 import '../../core/camera_config.dart';
 import '../../core/reconnect_policy.dart';
 import '../camera_state.dart';
@@ -116,9 +117,8 @@ class _PreviewScreenState extends State<PreviewScreen> {
       _videoController = controller;
       _playerReady = false;
     });
-
     _errorSub = player.stream.error.listen((error) {
-      debugPrint('Player error: $error');
+      AppLog.log('[Preview] Player error: $error');
       // Ignore errors from a superseded / stale Player.
       if (myGen != _rebuildGen || !mounted) return;
       state.setDisconnected();
@@ -149,7 +149,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       );
       setState(() => _playerReady = true);
     } catch (e) {
-      debugPrint('Player open error: $e');
+      AppLog.log('[Preview] Player open error: $e');
       if (mounted) {
         state.setDisconnected();
         setState(() => _playerReady = false);
@@ -164,12 +164,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
   void _scheduleReconnect(String rtspUrl) {
     final delay = _reconnectPolicy.nextDelay();
     if (delay == null) {
-      debugPrint('[Preview] Max reconnect attempts reached; giving up.');
+      AppLog.log('[Preview] Max reconnect attempts reached; giving up.');
       _reconnecting = false;
       return;
     }
     _reconnecting = true;
-    debugPrint('[Preview] Reconnect #${_reconnectPolicy.attempts} in ${delay.inSeconds}s');
+    AppLog.log(
+        '[Preview] Reconnect #${_reconnectPolicy.attempts} in ${delay.inSeconds}s');
     Future.delayed(delay, () {
       if (mounted) {
         unawaited(_rebuildPlayer(rtspUrl, isRetry: true));
@@ -206,11 +207,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
   Future<void> _openSettings() async {
     final state = context.read<CameraState>();
+    AppLog.log('[Preview] Opening settings');
     final result = await Navigator.of(context).push<CameraConfig>(
       MaterialPageRoute(
         builder: (_) => SettingsScreen(initialConfig: state.config),
       ),
     );
+    AppLog.log('[Preview] Settings closed, result=${result != null}');
     // If config changed, rebuild the player with the new RTSP URL.
     if (result != null && mounted) {
       // configVersion already bumped in updateConfig; rebuild player.

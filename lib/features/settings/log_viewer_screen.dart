@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -63,6 +64,41 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
     setState(() => _lines = AppLog.snapshot());
   }
 
+  /// Open the folder containing the on-disk log file in the OS file manager.
+  Future<void> _openLogFolder() async {
+    final path = AppLog.filePath;
+    if (path == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('日志文件不可用（可能尚未初始化）')),
+        );
+      }
+      return;
+    }
+    try {
+      final dir = File(path).parent.path;
+      final ProcessResult result;
+      if (Platform.isWindows) {
+        result = await Process.run('explorer', ['/select,', path]);
+      } else if (Platform.isMacOS) {
+        result = await Process.run('open', ['-R', path]);
+      } else {
+        result = await Process.run('xdg-open', [dir]);
+      }
+      if (result.exitCode != 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('无法打开文件夹：${result.stderr}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('打开日志文件夹失败：$e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -80,6 +116,15 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
+          IconButton(
+            onPressed: _openLogFolder,
+            tooltip: '打开日志文件夹',
+            icon: Icon(
+              Icons.folder_open,
+              size: 18,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
+          ),
           IconButton(
             onPressed: _copyAll,
             tooltip: '复制全部',
@@ -115,37 +160,71 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
           ),
         ],
       ),
-      body: _lines.isEmpty
-          ? Center(
-              child: Text(
-                '暂无日志',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  fontSize: 14,
+      body: Column(
+        children: [
+          // Log file location banner — where the on-disk log lives.
+          Container(
+            width: double.infinity,
+            color: Colors.white.withValues(alpha: 0.04),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.description_outlined,
+                  size: 14,
+                  color: Colors.white.withValues(alpha: 0.4),
                 ),
-              ),
-            )
-          : ListView.builder(
-              controller: _scroll,
-              padding: const EdgeInsets.all(12),
-              itemCount: _lines.length,
-              itemBuilder: (context, i) {
-                final line = _lines[i];
-                final color = _lineColor(line);
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 1),
-                  child: SelectableText(
-                    line,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    AppLog.filePath ?? '日志文件不可用',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: color,
+                      color: Colors.white.withValues(alpha: 0.5),
                       fontSize: 11,
                       fontFamily: 'SF Mono',
-                      height: 1.5,
                     ),
                   ),
-                );
-              },
+                ),
+              ],
             ),
+          ),
+          Expanded(
+            child: _lines.isEmpty
+                ? Center(
+                    child: Text(
+                      '暂无日志',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.3),
+                        fontSize: 14,
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    controller: _scroll,
+                    padding: const EdgeInsets.all(12),
+                    itemCount: _lines.length,
+                    itemBuilder: (context, i) {
+                      final line = _lines[i];
+                      final color = _lineColor(line);
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 1),
+                        child: SelectableText(
+                          line,
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 11,
+                            fontFamily: 'SF Mono',
+                            height: 1.5,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 

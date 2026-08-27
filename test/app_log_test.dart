@@ -23,8 +23,8 @@ void main() {
     test('log includes timestamp', () {
       AppLog.log('test');
       final lines = AppLog.snapshot();
-      // Timestamp format: HH:MM:SS.mmm
-      expect(lines[0], matches(r'^\d{2}:\d{2}:\d{2}\.\d{3} test$'));
+      // Timestamp format: YYYY-MM-DD HH:MM:SS.mmm
+      expect(lines[0], matches(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} test$'));
     });
 
     test('maxEntries caps buffer size', () {

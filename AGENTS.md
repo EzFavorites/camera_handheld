@@ -25,7 +25,6 @@ lib/
 │   ├── virtual_protocol.dart# 虚拟协议（调试）
 │   ├── ptz_protocol.dart    # 云台：PTZ + zoom 中继（串行队列）
 │   ├── digest_auth.dart     # Digest 鉴权助手
-│   ├── http_client.dart     # 共享 HTTP 客户端
 │   ├── reconnect_policy.dart
 │   ├── camera_config.dart / camera_config_store.dart
 │   └── app_log.dart         # 日志（替代 print）

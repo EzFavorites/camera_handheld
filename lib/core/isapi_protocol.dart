@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
 
@@ -22,8 +23,7 @@ import 'init_command.dart';
 /// - Latest zoom command can cancel pending ones (debounce for zoom)
 class IsapiProtocol implements CameraProtocol {
   CameraConfig config;
-  final http.Client _client = http.Client();
-  String? _cnonce;
+  final http.Client _client;
   int _nc = 0;
   bool _initialized = false;
   bool _isLocked = false;
@@ -57,22 +57,32 @@ class IsapiProtocol implements CameraProtocol {
   final String? _zoomOutCmd;
   final String? _zoomStopCmd;
 
-  IsapiProtocol({required this.config})
-      : _zoomInCmd = null,
+  IsapiProtocol({required this.config, http.Client? client})
+      : _client = client ?? http.Client(),
+        _zoomInCmd = null,
         _zoomOutCmd = null,
         _zoomStopCmd = null;
 
   IsapiProtocol.withVisca({
     required this.config,
+    http.Client? client,
     this._zoomInCmd,
     this._zoomOutCmd,
     this._zoomStopCmd,
-  });
+  }) : _client = client ?? http.Client();
 
   // ── Logging ─────────────────────────────────────────────────
 
   void _log(String msg) {
     AppLog.log('[ISAPI] $msg');
+  }
+
+  /// Generates a fresh, cryptographically random cnonce for each request so
+  /// Digest replay protection (RFC 2617) is not weakened by reusing a value.
+  String _generateCnonce() {
+    final rng = Random.secure();
+    final bytes = List<int>.generate(8, (_) => rng.nextInt(256));
+    return base64Encode(bytes);
   }
 
   // ── Digest auth ─────────────────────────────────────────────
@@ -93,7 +103,6 @@ class IsapiProtocol implements CameraProtocol {
       }
 
       final uri = Uri.parse('${config.httpUrl}$path');
-      _nc = 0;
       _log('$method $path');
 
       // 1st request: no auth.
@@ -103,7 +112,7 @@ class IsapiProtocol implements CameraProtocol {
       final resp1 = await _client.send(req1).timeout(const Duration(seconds: 5));
       final body1 = await resp1.stream.bytesToString();
 
-      if (_checkLocked(body1)) return http.Response(body1, resp1.statusCode);
+      if (_checkLocked(body1, resp1.statusCode)) return http.Response(body1, resp1.statusCode);
 
       if (resp1.statusCode != 401) {
         _log('$path → ${resp1.statusCode} (no auth needed)');
@@ -124,7 +133,7 @@ class IsapiProtocol implements CameraProtocol {
       }
 
       final realm = params['realm'] ?? '';
-      _cnonce ??= DigestAuth.generateCnonce();
+      final cnonce = _generateCnonce();
       _nc++;
       final ncStr = _nc.toString().padLeft(8, '0');
       _log('Digest: username=${config.username}, realm=$realm, nc=$ncStr');
@@ -133,7 +142,7 @@ class IsapiProtocol implements CameraProtocol {
         method: method,
         uriPath: uri.path,
         params: params,
-        cnonce: _cnonce!,
+        cnonce: cnonce,
         nc: _nc,
       );
 
@@ -144,14 +153,37 @@ class IsapiProtocol implements CameraProtocol {
       final resp2 = await _client.send(req2).timeout(const Duration(seconds: 5));
       final body2 = await resp2.stream.bytesToString();
 
-      if (_checkLocked(body2)) return http.Response(body2, resp2.statusCode);
+      if (_checkLocked(body2, resp2.statusCode)) return http.Response(body2, resp2.statusCode);
 
       _log('$path → ${resp2.statusCode}');
       return http.Response(body2, resp2.statusCode);
     });
   }
 
-  bool _checkLocked(String body) {
+  /// Detects a locked device from a response.
+  ///
+  /// Preference order (conservative, avoids false positives):
+  ///   1. Structured HTTP status: 403 / 429 are authoritative lock signals.
+  ///   2. ISAPI standard `<statusCode>` node indicating a lock condition.
+  ///   3. Fallback: bare substring match (kept for devices that return a plain
+  ///      "device is locked" body). Used as a last resort for backward compat.
+  bool _checkLocked(String body, int statusCode) {
+    if (statusCode == 403 || statusCode == 429) {
+      _isLocked = true;
+      _log('DEVICE LOCKED! (HTTP $statusCode)');
+      return true;
+    }
+    final statusCodeMatch =
+        RegExp(r'<statusCode>(.*?)</statusCode>', caseSensitive: false)
+            .firstMatch(body);
+    if (statusCodeMatch != null) {
+      final code = statusCodeMatch.group(1)!.trim().toLowerCase();
+      if (code.contains('lock') || code == '4' || code == '8') {
+        _isLocked = true;
+        _log('DEVICE LOCKED! (statusCode=$code)');
+        return true;
+      }
+    }
     if (body.toLowerCase().contains('device is locked')) {
       _isLocked = true;
       _log('DEVICE LOCKED!');
@@ -352,6 +384,7 @@ class IsapiProtocol implements CameraProtocol {
     config = newConfig;
     _isLocked = false;
     _initialized = false;
+    _nc = 0;
     _log('Config updated: ${config.ip}, user=${config.username}, pwd=${config.password.isEmpty ? "(empty)" : "(set)"}');
     // 保存配置后立即在后台发送初始化指令（fire-and-forget，走串行队列，不阻塞 UI）
     _initIfNeeded().catchError((e) => _log('post-save init failed: $e'));

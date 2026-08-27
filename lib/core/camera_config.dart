@@ -51,7 +51,8 @@ class CameraConfig {
   /// Base HTTP URL for ISAPI.
   String get httpUrl => 'http://$ip';
 
-  /// Full JSON, including the password. For debugging / round-trip only.
+  /// ⚠️ 含明文密码，禁止用于日志 / 异常上报 / 埋点等任何对外输出场景。
+  /// 仅用于本地持久化（shared_preferences，当前为明文存储）与配置往返。
   Map<String, dynamic> toJson() => {
         'ip': ip,
         'port': port,
@@ -61,6 +62,20 @@ class CameraConfig {
         'zoomTapDelayMs': zoomTapDelayMs,
         'initCommands': initCommands.map((c) => c.toJson()).toList(),
         'ptz': ptz.toJson(),
+      };
+
+  /// Safe JSON that **omits both the camera password and the PTZ password**.
+  /// Use this for logging, crash reporting, analytics, or any sink that may
+  /// leave the device. The full [toJson] (with plaintext passwords) must never
+  /// be serialized to such outputs.
+  Map<String, dynamic> toSafeJson() => {
+        'ip': ip,
+        'port': port,
+        'username': username,
+        'useSubStream': useSubStream,
+        'zoomTapDelayMs': zoomTapDelayMs,
+        'initCommands': initCommands.map((c) => c.toJson()).toList(),
+        'ptz': ptz.toSafeJson(),
       };
 
   factory CameraConfig.fromJson(Map<String, dynamic> json) => CameraConfig(

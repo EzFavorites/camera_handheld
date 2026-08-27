@@ -51,6 +51,16 @@ android {
         }
     }
 
+    // Release signing policy:
+    // - key.properties present (injected by CI from secrets for `v*` tags) →
+    //   use the real release keystore, so GitHub Release APKs are properly signed.
+    // - otherwise → fall back to the public debug key so local
+    //   `flutter build apk --release` still works during development.
+    // NOTE: APKs published through the GitHub Release are only real-signed when
+    // built from a `v*` tag with ANDROID_KEYSTORE_BASE64 / KEYSTORE_PASSWORD /
+    // KEY_ALIAS / KEY_PASSWORD repository secrets configured. Without them they
+    // ship debug-signed (public AOSP key — anyone could re-sign and hijack
+    // updates, and Play Store rejects them).
     buildTypes {
         release {
             signingConfig =

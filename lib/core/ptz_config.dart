@@ -24,6 +24,13 @@ class PtzConfig {
         'speed': speed,
       };
 
+  /// Safe JSON that omits the password (for logging / crash reporting).
+  Map<String, dynamic> toSafeJson() => {
+        'enabled': enabled,
+        'ip': ip,
+        'speed': speed,
+      };
+
   factory PtzConfig.fromJson(Map<String, dynamic> json) => PtzConfig(
         enabled: json['enabled'] is bool ? json['enabled'] as bool : false,
         ip: json['ip'] is String ? json['ip'] as String : '192.168.1.65',

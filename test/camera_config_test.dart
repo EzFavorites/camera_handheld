@@ -58,18 +58,18 @@ void main() {
       expect(config.port, 554);
     });
 
-    test('password with special characters is URL-encoded in rtspUrl', () {
+    test('rtspUrl percent-encodes reserved chars (@ #) in credentials', () {
       const config = CameraConfig(
         ip: '10.16.113.77',
         port: 554,
-        username: 'admin',
-        password: 'asdf!234',
+        username: 'a@b',
+        password: 'p#1',
         useSubStream: true,
       );
       final url = config.rtspUrl;
-      // ! must be encoded as %21
-      // Note: ! is not URL-encoded by Uri.encodeComponent
-    expect(url, contains('asdf!234'));
+      // @ -> %40, # -> %23 per RFC 3986 (Uri.encodeComponent).
+      expect(url, contains('a%40b'));
+      expect(url, contains('p%231'));
       expect(url, contains('10.16.113.77:554'));
       expect(url, contains('Channels/102'));
     });

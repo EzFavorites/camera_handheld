@@ -13,7 +13,6 @@ class PtzProtocol {
   PtzConfig config;
   final http.Client _client;
   final bool _ownsClient;
-  String? _cnonce;
   int _nc = 0;
   bool _isLocked = false;
 
@@ -46,7 +45,30 @@ class PtzProtocol {
     return completer.future;
   }
 
-  bool _checkLocked(String body) {
+  /// Detects a locked device from a response.
+  ///
+  /// Preference order (conservative, avoids false positives):
+  ///   1. Structured HTTP status: 403 / 429 are authoritative lock signals.
+  ///   2. ISAPI standard `<statusCode>` node indicating a lock condition.
+  ///   3. Fallback: bare substring match (kept for devices that return a plain
+  ///      "device is locked" body). Used as a last resort for backward compat.
+  bool _checkLocked(String body, int statusCode) {
+    if (statusCode == 403 || statusCode == 429) {
+      _isLocked = true;
+      _log('DEVICE LOCKED! (HTTP $statusCode)');
+      return true;
+    }
+    final statusCodeMatch =
+        RegExp(r'<statusCode>(.*?)</statusCode>', caseSensitive: false)
+            .firstMatch(body);
+    if (statusCodeMatch != null) {
+      final code = statusCodeMatch.group(1)!.trim().toLowerCase();
+      if (code.contains('lock') || code == '4' || code == '8') {
+        _isLocked = true;
+        _log('DEVICE LOCKED! (statusCode=$code)');
+        return true;
+      }
+    }
     if (body.toLowerCase().contains('device is locked')) {
       _isLocked = true;
       _log('DEVICE LOCKED!');
@@ -66,7 +88,6 @@ class PtzProtocol {
         throw StateError('PTZ device is locked. Wait and retry.');
       }
       final uri = Uri.parse('http://${config.ip}$path');
-      _nc = 0;
       _log('$method $path');
 
       final req1 = http.Request(method, uri);
@@ -75,7 +96,7 @@ class PtzProtocol {
       final resp1 = await _client.send(req1).timeout(const Duration(seconds: 5));
       final body1 = await resp1.stream.bytesToString();
 
-      if (_checkLocked(body1)) return http.Response(body1, resp1.statusCode);
+      if (_checkLocked(body1, resp1.statusCode)) return http.Response(body1, resp1.statusCode);
 
       if (resp1.statusCode != 401) {
         _log('$path → ${resp1.statusCode} (no auth)');
@@ -93,14 +114,14 @@ class PtzProtocol {
         return http.Response(body1, resp1.statusCode);
       }
 
-      _cnonce ??= DigestAuth.generateCnonce();
       _nc++;
+      final cnonce = DigestAuth.generateCnonce();
       final digest = DigestAuth(username: 'admin', password: config.password);
       final auth = digest.buildHeader(
         method: method,
         uriPath: uri.path,
         params: params,
-        cnonce: _cnonce!,
+        cnonce: cnonce,
         nc: _nc,
       );
 
@@ -110,7 +131,7 @@ class PtzProtocol {
       req2.headers['Authorization'] = auth;
       final resp2 = await _client.send(req2).timeout(const Duration(seconds: 5));
       final body2 = await resp2.stream.bytesToString();
-      if (_checkLocked(body2)) return http.Response(body2, resp2.statusCode);
+      if (_checkLocked(body2, resp2.statusCode)) return http.Response(body2, resp2.statusCode);
       _log('$path → ${resp2.statusCode}');
       return http.Response(body2, resp2.statusCode);
     });
@@ -155,7 +176,6 @@ class PtzProtocol {
   void updateConfig(PtzConfig newConfig) {
     config = newConfig;
     _isLocked = false;
-    _cnonce = null;
     _nc = 0;
     _log('Config updated: ${config.ip}, pwd=${config.password.isEmpty ? "(empty)" : "(set)"}');
   }

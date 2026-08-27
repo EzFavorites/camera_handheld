@@ -20,6 +20,8 @@
 - 录像、回放、多摄像头管理
 - 推流到公网 / 云平台
 
+> 演进说明：原“非目标”中的 **PTZ 云台**已在 **v1.1** 扩展支持 —— 外接云台通过 `PtzProtocol`（ISAPI Digest + continuous 接口）实现，已超出原始 v1 范围但现已落地。
+
 ---
 
 ## 2. 架构总览
@@ -71,7 +73,7 @@
 | RTSP 支持 | mpv 原生支持 | 原生支持 |
 | 延迟参数 | `cache=yes` / `demuxer-readahead` 可控 | `--network-caching` 可控 |
 
-**决策**：v1 用 media_kit 快速跑通端到端，播放层通过 `VideoPlayerAdapter` 薄封装隔离，未来可无缝切换到 libVLC 而不动 UI。
+**决策**：v1 用 media_kit 快速跑通端到端。播放层**直接**使用 `media_kit`（`preview_screen.dart` 持有 `Player` / `VideoController`），未引入额外的 `VideoPlayerAdapter` 薄封装抽象；未来若要切换到 libVLC，需改 `preview_screen.dart` 的播放装配。
 
 ---
 
@@ -132,7 +134,7 @@ abstract class CameraProtocol {
 |---|---|---|
 | 设备信息 | `GET /ISAPI/System/deviceInfo` | 连接自检 + 型号识别 |
 | 抓图 | `GET /ISAPI/Streaming/channels/1/picture` | 响应体即 JPEG |
-| 变倍 | `PUT /ISAPI/System/Video/inputs/channels/1/zoom` `<ZoomCommand>tele\|wide\|stop</ZoomCommand>` | 按下 start，松开 stop |
+| 变倍 | VISCA 指令经 `POST /ISAPI/System/MovementMgr/channels/1/MovementParam?format=json` 透传（`visca_tran_jx`） | 按住即变倍（VISCA 步进），松开 stop |
 | 对焦 | `PUT /ISAPI/System/Video/inputs/channels/1/focus` `<FocusCommand>near\|far\|stop</FocusCommand>` | 可选 |
 | 聚焦区域 | `PUT .../focus` 或 `.../pictureFocus` 区域坐标 | 归一化坐标处理见 §6 |
 
@@ -144,7 +146,7 @@ abstract class CameraProtocol {
 
 ### 5.4 安全提示
 
-- 设备密码不得硬编码，通过配置界面输入，加密存储（`flutter_secure_storage`）
+- 设备密码不得硬编码，通过配置界面输入。**当前（v1）使用 `shared_preferences` 明文持久化，安全存储（Keychain / Keystore / `flutter_secure_storage`）为已知待办项，尚未实现** —— 请勿在不信任设备存储敏感密码。
 - 局域网内建议关闭摄像头 Web 端口公网暴露
 
 ---
@@ -257,7 +259,7 @@ camera_handheld/
 │   ├── core/
 │   │   ├── camera_protocol.dart  # 协议抽象接口
 │   │   ├── virtual_protocol.dart # 虚拟协议（调试）
-│   │   └── isapi_protocol.dart   # ISAPI 实现（后续）
+│   │   └── isapi_protocol.dart   # ISAPI 实现（已实现）
 │   ├── features/
 │   │   ├── camera_state.dart     # 全局状态 ChangeNotifier
 │   │   ├── preview/
@@ -265,13 +267,8 @@ camera_handheld/
 │   │   │   └── focus_overlay.dart   # 对焦框
 │   │   ├── capture/
 │   │   │   └── shutter_button.dart  # 快门
-│   │   ├── lens/
-│   │   │   └── zoom_controls.dart   # 变倍
-│   │   └── status/
-│   │       └── status_bar.dart      # 状态栏
-│   └── shared/
-│       └── widgets/
-│           └── idle_hide.dart       # 浮层自动隐藏
+│   │   └── lens/
+│   │       └── zoom_controls.dart   # 变倍
 ├── .github/workflows/build.yml  # CI/CD
 ├── docs/DESIGN.md               # 本文档
 └── pubspec.yaml
@@ -298,7 +295,7 @@ camera_handheld/
 | media_kit 在 Windows 打包需捆绑 mpv | 构建复杂度 | 用官方 libs 包自动捆绑；CI 上验证 |
 | Docker/CI 环境缺 Visual Studio 工具链 | Windows 构建失败 | 用 windows-latest runner + `flutter build` 官方 action |
 | 海康固件 ISAPI 字段差异 | 控制失效 | 先 `GET` 能力集 XML 动态适配；预留字段映射表 |
-| mpv 默认缓存导致预览延迟 | 手感差 | 子码流 + 缓存参数调优；必要时切 libVLC（播放层已隔离） |
+| mpv 默认缓存导致预览延迟 | 手感差 | 子码流 + 缓存参数调优；必要时切 libVLC（需改 preview_screen 播放装配） |
 | Android 硬解个别机型兼容 | 花屏/卡顿 | mpv 软解兜底开关（设置项） |
 
 ---

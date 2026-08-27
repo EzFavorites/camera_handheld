@@ -19,7 +19,7 @@ flutter run -d android # 连接 Android 设备
 ```
 
 > 预览需要可达的 RTSP 流；无硬件时可用 `VirtualProtocol` 跑通界面（日志输出操作）。
-> 摄像头密码通过 `flutter_secure_storage` 加密存储（Keystore / Keychain），不会明文落盘。
+> ⚠️ 安全说明：摄像头密码当前使用 `shared_preferences` **明文**持久化（非加密）。安全存储（Keychain / Keystore / `flutter_secure_storage`）为**已知待办项，尚未实现**。请勿在不信任的设备上存储敏感密码。
 
 ## 构建
 
@@ -50,7 +50,7 @@ lib/
 ├── app.dart                  # MaterialApp + Provider 装配
 ├── core/
 │   ├── camera_config.dart    # 连接配置 + RTSP URL 构造
-│   ├── camera_config_store.dart  # shared_prefs + 安全存储
+│   ├── camera_config_store.dart  # shared_preferences 持久化（明文，安全存储待做）
 │   ├── camera_protocol.dart  # 协议抽象接口
 │   └── virtual_protocol.dart # 虚拟协议（调试）
 ├── features/

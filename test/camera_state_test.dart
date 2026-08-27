@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:camera_handheld/core/camera_config.dart';
+import 'package:camera_handheld/core/ptz_config.dart';
+import 'package:camera_handheld/core/ptz_protocol.dart';
 import 'package:camera_handheld/core/virtual_protocol.dart';
 import 'package:camera_handheld/features/camera_state.dart';
 
@@ -126,4 +128,119 @@ void main() {
       expect(count, greaterThan(0));
     });
   });
+
+  group('CameraState ptz relay', () {
+    late VirtualProtocol camera;
+    late _SpyPtzProtocol spy;
+
+    setUp(() {
+      camera = VirtualProtocol();
+      spy = _SpyPtzProtocol();
+    });
+
+    CameraState buildState({required PtzConfig ptz, PtzProtocol? ptzProtocol}) =>
+        CameraState(
+          protocol: camera,
+          config: CameraConfig(ptz: ptz),
+          ptzProtocol: ptzProtocol,
+        );
+
+    test('zoomIn relays zoomIn to ptz when enabled', () async {
+      final s = buildState(
+        ptz: const PtzConfig(enabled: true, ip: '1.1.1.1', password: 'p', speed: 50),
+        ptzProtocol: spy,
+      );
+      await s.zoomIn();
+      expect(spy.zoomInCalls, 1);
+      expect(spy.zoomOutCalls, 0);
+      expect(spy.stopCalls, 0);
+      s.dispose();
+    });
+
+    test('zoomOut relays zoomOut to ptz when enabled', () async {
+      final s = buildState(
+        ptz: const PtzConfig(enabled: true, ip: '1.1.1.1', password: 'p', speed: 50),
+        ptzProtocol: spy,
+      );
+      await s.zoomOut();
+      expect(spy.zoomOutCalls, 1);
+      expect(spy.zoomInCalls, 0);
+      s.dispose();
+    });
+
+    test('zoomStop relays stop to ptz when enabled', () async {
+      final s = buildState(
+        ptz: const PtzConfig(enabled: true, ip: '1.1.1.1', password: 'p', speed: 50),
+        ptzProtocol: spy,
+      );
+      await s.zoomStop();
+      expect(spy.stopCalls, 1);
+      s.dispose();
+    });
+
+    test('no relay when ptz disabled', () async {
+      final s = buildState(ptz: const PtzConfig(), ptzProtocol: spy);
+      await s.zoomIn();
+      await s.zoomOut();
+      await s.zoomStop();
+      expect(spy.zoomInCalls, 0);
+      expect(spy.zoomOutCalls, 0);
+      expect(spy.stopCalls, 0);
+      s.dispose();
+    });
+
+    test('no relay when ptzProtocol null', () async {
+      final s = buildState(
+        ptz: const PtzConfig(enabled: true, ip: '1.1.1.1', password: 'p', speed: 50),
+        ptzProtocol: null,
+      );
+      await s.zoomIn();
+      await s.zoomStop();
+      // 不应抛错，主流程不受影响
+      expect(s.zoomLevel, greaterThan(1.0));
+      s.dispose();
+    });
+
+    test('updateConfig relays ptz config', () async {
+      final s = buildState(
+        ptz: const PtzConfig(enabled: true, ip: '1.1.1.1', password: 'p', speed: 50),
+        ptzProtocol: spy,
+      );
+      final newPtz = const PtzConfig(enabled: true, ip: '2.2.2.2', password: 'q', speed: 80);
+      s.updateConfig(CameraConfig(ptz: newPtz));
+      expect(spy.lastConfig?.ip, '2.2.2.2');
+      expect(spy.lastConfig?.speed, 80);
+      s.dispose();
+    });
+  });
+}
+
+/// Spy subclass of PtzProtocol that counts relay calls without network I/O.
+class _SpyPtzProtocol extends PtzProtocol {
+  int zoomInCalls = 0;
+  int zoomOutCalls = 0;
+  int stopCalls = 0;
+  PtzConfig? lastConfig;
+
+  _SpyPtzProtocol()
+      : super(config: const PtzConfig(enabled: true, ip: '1.1.1.1', password: 'p', speed: 50));
+
+  @override
+  Future<void> zoomIn() async => zoomInCalls++;
+  @override
+  Future<void> zoomOut() async => zoomOutCalls++;
+  @override
+  Future<void> zoomStop() async => stopCalls++;
+  @override
+  Future<void> stop() async => stopCalls++;
+
+  @override
+  void updateConfig(PtzConfig c) {
+    lastConfig = c;
+  }
+
+  @override
+  void dispose() {
+    // 不关闭父类真实 http client（测试中未使用）
+  }
 }

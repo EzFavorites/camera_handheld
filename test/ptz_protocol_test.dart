@@ -143,7 +143,7 @@ void main() {
     test('requests serialized through queue', () async {
       final order = <String>[];
       final client = MockClient((request) async {
-        order.add(request.body ?? '');
+        order.add(request.body);
         if (request.headers['Authorization'] == null) {
           return http.Response('', 401, headers: {
             'www-authenticate':

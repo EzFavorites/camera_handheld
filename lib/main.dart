@@ -4,6 +4,7 @@ import 'package:media_kit/media_kit.dart';
 import 'app.dart';
 import 'core/camera_config_store.dart';
 import 'core/isapi_protocol.dart';
+import 'core/ptz_protocol.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,8 +17,15 @@ void main() async {
   // VirtualProtocol remains available for offline/testing.
   final protocol = IsapiProtocol(config: config);
 
+  // External PTZ gimbal, only when enabled in config.
+  PtzProtocol? ptz;
+  if (config.ptz.enabled) {
+    ptz = PtzProtocol(config: config.ptz);
+  }
+
   runApp(CameraApp(
     protocol: protocol,
     initialConfig: config,
+    ptzProtocol: ptz,
   ));
 }

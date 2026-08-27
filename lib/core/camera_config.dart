@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'init_command.dart';
+import 'ptz_config.dart';
 
 /// Camera connection configuration.
 /// Persisted via shared_preferences; used to build RTSP URL and ISAPI client.
@@ -15,6 +16,8 @@ class CameraConfig {
   final int zoomTapDelayMs;
   /// Initialization command list sent on first connection.
   final List<InitCommand> initCommands;
+  /// External PTZ gimbal device config (disabled by default).
+  final PtzConfig ptz;
 
   const CameraConfig({
     this.ip = '192.168.1.64',
@@ -24,6 +27,7 @@ class CameraConfig {
     this.useSubStream = true,
     this.zoomTapDelayMs = 60,
     this.initCommands = InitCommand.defaults,
+    this.ptz = const PtzConfig(),
   });
 
   /// Build RTSP URL from config.
@@ -56,6 +60,7 @@ class CameraConfig {
         'useSubStream': useSubStream,
         'zoomTapDelayMs': zoomTapDelayMs,
         'initCommands': initCommands.map((c) => c.toJson()).toList(),
+        'ptz': ptz.toJson(),
       };
 
   factory CameraConfig.fromJson(Map<String, dynamic> json) => CameraConfig(
@@ -66,6 +71,9 @@ class CameraConfig {
         useSubStream: json['useSubStream'] is bool ? json['useSubStream'] as bool : true,
         zoomTapDelayMs: _toInt(json['zoomTapDelayMs'], 60),
         initCommands: _parseInitCommands(json['initCommands']),
+        ptz: json['ptz'] is Map
+            ? PtzConfig.fromJson(json['ptz'] as Map<String, dynamic>)
+            : const PtzConfig(),
       );
 
   static int _toInt(dynamic value, [int fallback = 554]) {
@@ -96,6 +104,7 @@ class CameraConfig {
     bool? useSubStream,
     int? zoomTapDelayMs,
     List<InitCommand>? initCommands,
+    PtzConfig? ptz,
   }) =>
       CameraConfig(
         ip: ip ?? this.ip,
@@ -105,6 +114,7 @@ class CameraConfig {
         useSubStream: useSubStream ?? this.useSubStream,
         zoomTapDelayMs: zoomTapDelayMs ?? this.zoomTapDelayMs,
         initCommands: initCommands ?? this.initCommands,
+        ptz: ptz ?? this.ptz,
       );
 
   @override
@@ -118,8 +128,9 @@ class CameraConfig {
           password == other.password &&
           useSubStream == other.useSubStream &&
           zoomTapDelayMs == other.zoomTapDelayMs &&
-          listEquals(initCommands, other.initCommands);
+          listEquals(initCommands, other.initCommands) &&
+          ptz == other.ptz;
 
   @override
-  int get hashCode => Object.hash(ip, port, username, password, useSubStream, zoomTapDelayMs, Object.hashAll(initCommands));
+  int get hashCode => Object.hash(ip, port, username, password, useSubStream, zoomTapDelayMs, Object.hashAll(initCommands), ptz);
 }

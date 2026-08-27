@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:camera_handheld/core/camera_config.dart';
 import 'package:camera_handheld/core/init_command.dart';
+import 'package:camera_handheld/core/ptz_config.dart';
 
 void main() {
   group('CameraConfig', () {
@@ -152,6 +153,39 @@ void main() {
     test('fromJson falls back to defaults when initCommands is null', () {
       final config = CameraConfig.fromJson({});
       expect(config.initCommands, InitCommand.defaults);
+    });
+  });
+
+  group('ptz', () {
+    test('default ptz disabled', () {
+      const c = CameraConfig();
+      expect(c.ptz.enabled, isFalse);
+      expect(c.ptz.speed, 50);
+    });
+
+    test('toJson/fromJson round-trips ptz', () {
+      const c = CameraConfig(
+        ptz: PtzConfig(enabled: true, ip: '9.9.9.9', password: 'pw', speed: 70),
+      );
+      final back = CameraConfig.fromJson(c.toJson());
+      expect(back.ptz, c.ptz);
+    });
+
+    test('fromJson backward-compat: missing ptz key → default', () {
+      final back = CameraConfig.fromJson({
+        'ip': '1.2.3.4',
+        'username': 'admin',
+        'password': 'x',
+      });
+      expect(back.ptz.enabled, isFalse);
+      expect(back.ptz.ip, '192.168.1.65');
+    });
+
+    test('copyWith ptz', () {
+      const c = CameraConfig();
+      final c2 = c.copyWith(ptz: const PtzConfig(enabled: true, speed: 90));
+      expect(c2.ptz.enabled, isTrue);
+      expect(c2.ptz.speed, 90);
     });
   });
 }

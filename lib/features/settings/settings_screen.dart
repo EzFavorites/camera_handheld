@@ -5,6 +5,8 @@ import '../../core/camera_config.dart';
 import '../../core/camera_config_store.dart';
 import '../../core/init_command.dart';
 import '../../core/isapi_protocol.dart';
+import '../../core/ptz_config.dart';
+import '../../core/ptz_protocol.dart';
 import 'log_viewer_screen.dart';
 import '../camera_state.dart';
 
@@ -27,6 +29,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _zoomDelayCtrl;
   late bool _useSubStream;
   late List<InitCommand> _initCommands;
+  late bool _ptzEnabled;
+  late final TextEditingController _ptzIpCtrl;
+  late final TextEditingController _ptzPassCtrl;
+  late int _ptzSpeed;
   bool _obscurePassword = true;
   bool _saving = false;
 
@@ -41,6 +47,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         TextEditingController(text: widget.initialConfig.zoomTapDelayMs.toString());
     _useSubStream = widget.initialConfig.useSubStream;
     _initCommands = List.of(widget.initialConfig.initCommands);
+    _ptzEnabled = widget.initialConfig.ptz.enabled;
+    _ptzIpCtrl = TextEditingController(text: widget.initialConfig.ptz.ip);
+    _ptzPassCtrl = TextEditingController(text: widget.initialConfig.ptz.password);
+    _ptzSpeed = widget.initialConfig.ptz.speed;
   }
 
   @override
@@ -50,6 +60,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _userCtrl.dispose();
     _passCtrl.dispose();
     _zoomDelayCtrl.dispose();
+    _ptzIpCtrl.dispose();
+    _ptzPassCtrl.dispose();
     super.dispose();
   }
 
@@ -62,6 +74,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       useSubStream: _useSubStream,
       zoomTapDelayMs: int.tryParse(_zoomDelayCtrl.text.trim()) ?? 60,
       initCommands: List.of(_initCommands),
+      ptz: PtzConfig(
+        enabled: _ptzEnabled,
+        ip: _ptzIpCtrl.text.trim().isEmpty ? '192.168.1.65' : _ptzIpCtrl.text.trim(),
+        password: _ptzPassCtrl.text,
+        speed: _ptzSpeed,
+      ),
     );
   }
 
@@ -96,6 +114,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
       return;
+    }
+
+    // Test PTZ gimbal connection before saving (only when enabled).
+    if (config.ptz.enabled) {
+      try {
+        final ptzError = await PtzProtocol.testConnection(config.ptz);
+        if (ptzError != null) {
+          if (mounted) {
+            setState(() => _saving = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(ptzError),
+                backgroundColor: Colors.red.shade800,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
+          return;
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _saving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('PTZ connection test failed: $e'),
+              backgroundColor: Colors.red.shade800,
+            ),
+          );
+        }
+        return;
+      }
     }
 
     // Connection successful — save config.
@@ -228,6 +277,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
             hint: '60',
             keyboardType: TextInputType.number,
           ),
+          const SizedBox(height: 32),
+          _SectionLabel(text: '云台'),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '启用外接云台',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  fontSize: 14,
+                ),
+              ),
+              Switch(
+                key: const ValueKey('ptz_enable_switch'),
+                value: _ptzEnabled,
+                onChanged: (v) => setState(() => _ptzEnabled = v),
+              ),
+            ],
+          ),
+          if (_ptzEnabled) ...[
+            const SizedBox(height: 12),
+            _TextField(
+              controller: _ptzIpCtrl,
+              label: '云台设备 IP',
+              hint: '192.168.1.65',
+              keyboardType: TextInputType.url,
+            ),
+            const SizedBox(height: 16),
+            _TextField(
+              controller: _ptzPassCtrl,
+              label: '云台密码',
+              hint: '••••••',
+              obscureText: true,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Text(
+                  '转速',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 13,
+                  ),
+                ),
+                Expanded(
+                  child: Slider(
+                    value: _ptzSpeed.toDouble(),
+                    min: 1,
+                    max: 100,
+                    divisions: 99,
+                    label: '$_ptzSpeed',
+                    onChanged: (v) => setState(() => _ptzSpeed = v.round()),
+                  ),
+                ),
+                SizedBox(
+                  width: 32,
+                  child: Text(
+                    '$_ptzSpeed',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.end,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '用户名固定 admin。转速 1–100，数值越大转动越快。主设备变倍时云台同步变倍。',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.35),
+                fontSize: 11,
+              ),
+            ),
+          ],
           const SizedBox(height: 40),
           _SectionLabel(text: '初始化命令'),
           const SizedBox(height: 4),

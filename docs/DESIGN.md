@@ -61,7 +61,8 @@
 | UI 框架 | Flutter 3.x (Dart) | 一套代码，macOS/Windows/Android 三端 |
 | 视频播放 | `media_kit` + `media_kit_video` | mpv 内核，RTSP 原生支持，硬解 |
 | 状态管理 | `provider` (ChangeNotifier) | 简单可靠，无过度设计 |
-| 协议客户端（未来） | Dart `http` + Digest 认证 + XML 解析 | ISAPI 集成时引入 |
+| 协议客户端 | `package:http` + `package:crypto`（Digest） | ISAPI：Digest 认证、抓图、VISCA 变倍、对焦、初始化指令；`DigestAuth` helper 复用于主设备与云台 |
+| 本地持久化 | `shared_preferences`（经 `CameraConfigStore`） | 配置落盘（当前明文，见 §5.4 安全待办） |
 | 桌面原生库 | `media_kit_libs_macos_video` | macOS 打包依赖 |
 
 ### 为什么暂选 media_kit 而非直接 libVLC
@@ -113,7 +114,7 @@ await player.open(Media(url, httpHeaders: ...));
 
 ## 5. 控制协议设计（ISAPI）
 
-> v1 使用 `VirtualProtocol`（打印调试），接口先行；ISAPI 真实实现后续接入。
+> 接口先行：`VirtualProtocol`（离线调试）与 `IsapiProtocol`（真实实现）均实现 `CameraProtocol`，运行时按配置切换。ISAPI 真实实现已落地。
 
 ### 5.1 抽象接口（已实现）
 
@@ -128,7 +129,7 @@ abstract class CameraProtocol {
 }
 ```
 
-### 5.2 未来 ISAPI 实现映射
+### 5.2 ISAPI 实现（`IsapiProtocol`，已实现）
 
 | 操作 | HTTP 请求 | 说明 |
 |---|---|---|
@@ -138,13 +139,21 @@ abstract class CameraProtocol {
 | 对焦 | `PUT /ISAPI/System/Video/inputs/channels/1/focus` `<FocusCommand>near\|far\|stop</FocusCommand>` | 可选 |
 | 聚焦区域 | `PUT .../focus` 或 `.../pictureFocus` 区域坐标 | 归一化坐标处理见 §6 |
 
-### 5.3 认证
+### 5.3 认证（`DigestAuth` helper，已实现）
 
-- 海康默认 **HTTP Digest** 认证（非 Basic）
-- Dart 层实现：首包 401 → 用 realm/nonce 计算摘要 → 带 `Authorization` 重发
-- v1 预留：`IsapiProtocol` 构造函数接收 `ip / port / user / password`
+- 海康默认 **HTTP Digest** 认证（非 Basic）。
+- `lib/core/digest_auth.dart` 的 `DigestAuth` 封装：解析 `WWW-Authenticate` → 计算 HA1/HA2/response → 拼装 `Authorization` 头；`IsapiProtocol` 与 `PtzProtocol` 共用，首包 401 后自动带摘要重发。
+- `IsapiProtocol` 构造接收 `CameraConfig`（ip / port / username / password 等），`updateConfig` 可热更新并触发后台初始化指令重发。
+- 每请求生成新的随机 `cnonce`（`Random.secure`），满足 RFC 2617 重放保护。
 
-### 5.4 安全提示
+### 5.4 外接云台（`PtzProtocol`，已实现，v1.1）
+
+> 独立类，**不实现** `CameraProtocol`（接口面向主设备；云台只需 pan/tilt/zoom）。设计详见 `docs/superpowers/specs/2026-08-27-ptz-gimbal-design.md`。
+
+- PTZ 走 Hikvision continuous 接口 `PUT /ISAPI/PTZCtrl/channels/1/continuous`，报文 `<PTZData><pan/><tilt/><zoom/></PTZData>`，值为归一化方向 × `config.normalizedSpeed`。
+- 复用 `DigestAuth` + 串行队列（同 `IsapiProtocol` 思路，5s 超时）。
+
+### 5.5 安全提示
 
 - 设备密码不得硬编码，通过配置界面输入。**当前（v1）使用 `shared_preferences` 明文持久化，安全存储（Keychain / Keystore / `flutter_secure_storage`）为已知待办项，尚未实现** —— 请勿在不信任设备存储敏感密码。
 - 局域网内建议关闭摄像头 Web 端口公网暴露
@@ -192,13 +201,12 @@ abstract class CameraProtocol {
 │       ┌──────────┐            │
 │       │ □ 对焦框   │ ← 点击出现  │
 │       └──────────┘  坐标 0-1000│
-│                (+)             │  ← 变倍（右侧，隐式)
-│                (−)             │     长按连发
-│                              │
+│  ↑                           (+) │  ← 变倍（右侧，隐式)
+│←   →                         (−) │     长按连发
+│  ↓                               │  ← 云台控制盘（左下，启用时）
 │  [AF] [2.5×] [H.265] [ON]    │  ← 状态栏
 │             ⊙                │  ← 快门
 └────────────────────────────────┘
-```
 
 ### 7.3 交互映射
 
@@ -209,6 +217,10 @@ abstract class CameraProtocol {
 | 短按变倍 +/− | 单次变倍 | `zoomIn/Out` + `zoomStop` |
 | 长按变倍 +/− | 连续变倍 | `zoomIn/Out`（按住期间） |
 | 松手 | 停止 | `zoomStop()` |
+| 短按云台方向 | 脉冲转动 | `ptz.up/down/left/right()` + `stop()` |
+| 长按云台方向 | 连续转动 | `ptz.up/down/left/right()`（按住期间） |
+| 松手 | 停止 | `ptz.stop()` |
+| 变倍 +/−（云台启用） | 主设备变倍同时联动云台变倍 | `ptz.zoomIn/Out/Stop()`（fire-and-forget） |
 | 任意点击 | 唤回控制浮层 | — |
 
 ---
@@ -254,23 +266,38 @@ abstract class CameraProtocol {
 ```
 camera_handheld/
 ├── lib/
-│   ├── main.dart                 # 入口：MediaKit 初始化 + 装配
+│   ├── main.dart                 # 入口：MediaKit 初始化 + 日志 + 装配（VIRTUAL 演示模式）
 │   ├── app.dart                  # MaterialApp + Provider 装配
 │   ├── core/
 │   │   ├── camera_protocol.dart  # 协议抽象接口
 │   │   ├── virtual_protocol.dart # 虚拟协议（调试）
-│   │   └── isapi_protocol.dart   # ISAPI 实现（已实现）
+│   │   ├── isapi_protocol.dart   # ISAPI 实现（Digest + VISCA 变倍 + 抓图 + 对焦 + 初始化指令 + 锁定检测）
+│   │   ├── digest_auth.dart      # Digest 认证 helper（IsapiProtocol / PtzProtocol 共用）
+│   │   ├── ptz_config.dart       # 外接云台配置模型
+│   │   ├── ptz_protocol.dart     # 外接云台 continuous PTZ + 变倍联动
+│   │   ├── camera_config.dart    # 配置模型（含 ptz 子配置）
+│   │   ├── camera_config_store.dart  # shared_preferences 持久化
+│   │   ├── init_command.dart     # 初始化指令模型（VISCA / ISAPI）
+│   │   ├── reconnect_policy.dart # 断流重连（指数退避）
+│   │   └── app_log.dart          # 文件日志（替代 print）
 │   ├── features/
-│   │   ├── camera_state.dart     # 全局状态 ChangeNotifier
+│   │   ├── camera_state.dart     # 全局状态 ChangeNotifier（含 PTZ 变倍联动）
 │   │   ├── preview/
 │   │   │   ├── preview_screen.dart  # 主界面
 │   │   │   └── focus_overlay.dart   # 对焦框
 │   │   ├── capture/
 │   │   │   └── shutter_button.dart  # 快门
-│   │   └── lens/
-│   │       └── zoom_controls.dart   # 变倍
-├── .github/workflows/build.yml  # CI/CD
+│   │   ├── lens/
+│   │   │   └── zoom_controls.dart   # 变倍
+│   │   ├── ptz/
+│   │   │   └── ptz_controls.dart    # 四方向云台控制盘
+│   │   └── settings/
+│   │       ├── settings_screen.dart    # 设备 + 云台配置
+│   │       └── log_viewer_screen.dart  # 日志查看
+├── test/                         # 单测：协议、配置、状态、UI
+├── .github/workflows/build.yml  # CI/CD（三端 analyze + 构建）
 ├── docs/DESIGN.md               # 本文档
+├── docs/superpowers/            # 云台设计与实现计划
 └── pubspec.yaml
 ```
 

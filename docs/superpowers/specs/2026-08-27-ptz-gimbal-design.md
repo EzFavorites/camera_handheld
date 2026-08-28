@@ -96,17 +96,26 @@ class PtzProtocol {
   PtzConfig config;
   // 复用 IsapiProtocol 的 Digest 认证 + 串行队列思路，
   // 但路径与报文不同，故独立实现而非继承（IsapiProtocol 的 _request 是私有）。
-  Future<void> move(PanTiltZoom ptz);   // PUT continuous
+  /// continuous PTZ。pan/tilt/zoom 为 -1.0..1.0 方向值（已含符号），
+  /// 内部乘 config.normalizedSpeed 下发。
+  Future<void> move({required double pan, required double tilt, required double zoom});
   Future<void> stop();                  // 全零 PTZData
   Future<void> zoomIn();  // zoom=+speed
   Future<void> zoomOut(); // zoom=-speed
   Future<void> zoomStop();// zoom=0
+  // 方向便捷方法（海康坐标系：pan 正=右 负=左；tilt 正=下 负=上）
+  Future<void> up();
+  Future<void> down();
+  Future<void> left();
+  Future<void> right();
   void updateConfig(PtzConfig c);
+  static Future<String?> testConnection(PtzConfig c);  // 设置页自检
   void dispose();
 }
 ```
-- `move` 接收归一化 `{pan, tilt, zoom}` 三元组。
-- Digest 认证逻辑从 `IsapiProtocol` 提取复用：抽一个 `DigestAuth` helper（`lib/core/digest_auth.dart`），`IsapiProtocol` 与 `PtzProtocol` 共用。抽 helper 时保持 `IsapiProtocol` 行为不变（纯重构，行为零变化）。
+- `move` 接收归一化方向三元组（命名参数），内部乘 `config.normalizedSpeed`。
+- `up/down/left/right` 为方向便捷方法，等价于 `move(pan:±1, tilt:±1, zoom:0)`。
+- 每请求生成新随机 `cnonce`（`Random.secure`），不缓存，满足 RFC 2617 重放保护（实现比计划更严）。
 - 同样用串行队列避免快速点击时请求堆积冻结 UI。
 - 静态 `testConnection(PtzConfig)` 复用 `DigestAuth` 做 `GET /ISAPI/System/deviceInfo` 自检。
 
@@ -143,7 +152,7 @@ class PtzProtocol {
 
 ## 6. 错误处理
 - 云台请求失败：`PtzProtocol` 内 try/catch + `AppLog` 记录，不弹错误（避免预览中频繁打扰）。
-- 设备锁定（`device is locked`）：复用 `IsapiProtocol._checkLocked` 思路，置 `_isLocked` 后所有 move 直接抛错记 log。
+- 设备锁定检测：`_checkLocked(body, statusCode)` 三层判定（保守，避免误报）：① HTTP 403/429 为权威锁定信号；② ISAPI `<statusCode>` 节点含 lock/4/8；③ 兜底子串匹配 `device is locked`。命中后置 `_isLocked`，后续 move 直接抛 `StateError` 记 log。`updateConfig` 会重置 `_isLocked`。
 - 主设备变倍不应因云台失败而中断：联动调用 fire-and-forget，错误 swallow。
 
 ---

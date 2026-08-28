@@ -46,7 +46,7 @@
 - Create: `lib/core/ptz_config.dart`
 - Test: `test/ptz_config_test.dart`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```dart
 // test/ptz_config_test.dart
@@ -104,12 +104,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd camera_handheld && flutter test test/ptz_config_test.dart`
 Expected: FAIL — `ptz_config.dart` 不存在 / 编译错误。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```dart
 // lib/core/ptz_config.dart
@@ -179,12 +179,12 @@ class PtzConfig {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd camera_handheld && flutter test test/ptz_config_test.dart`
 Expected: PASS (6 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd camera_handheld
@@ -202,7 +202,7 @@ git commit -m "feat(ptz): add PtzConfig data model"
 
 > 目标：把 `IsapiProtocol` 的 Digest 计算（realm/nonce/opaque/qop/cnonce/nc/HA1/HA2/response + Authorization 头拼装）抽成可复用 helper，`IsapiProtocol` 与后续 `PtzProtocol` 共用。**纯重构，IsapiProtocol 行为零变化。**
 
-- [ ] **Step 1: 写 DigestAuth helper**
+- [x] **Step 1: 写 DigestAuth helper**
 
 ```dart
 // lib/core/digest_auth.dart
@@ -274,7 +274,7 @@ class DigestAuth {
 }
 ```
 
-- [ ] **Step 2: 重构 IsapiProtocol 复用 DigestAuth**
+- [x] **Step 2: 重构 IsapiProtocol 复用 DigestAuth**
 
 修改 `lib/core/isapi_protocol.dart`：
 - 顶部 import `'digest_auth.dart'`。
@@ -298,12 +298,12 @@ class DigestAuth {
 - `testConnection` 静态方法里同样用 `DigestAuth.parseParams` / `generateCnonce` / `buildHeader`。
 - 删除 `_parseDigestParams`、`_generateCnonce`、`_md5` 三个被替代的私有方法。
 
-- [ ] **Step 3: 跑现有 isapi 测试验证零行为变化**
+- [x] **Step 3: 跑现有 isapi 测试验证零行为变化**
 
 Run: `cd camera_handheld && flutter test test/isapi_protocol_test.dart`
 Expected: 全部 PASS（与重构前一致）。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd camera_handheld
@@ -321,7 +321,7 @@ git commit -m "refactor: extract DigestAuth helper, IsapiProtocol behavior uncha
 
 > 复用 `DigestAuth` + 串行队列（同 IsapiProtocol 思路）。PTZData XML 用新固件字段 `pan`/`tilt`/`zoom`。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```dart
 // test/ptz_protocol_test.dart
@@ -493,12 +493,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd camera_handheld && flutter test test/ptz_protocol_test.dart`
 Expected: FAIL — `ptz_protocol.dart` 不存在。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```dart
 // lib/core/ptz_protocol.dart
@@ -729,12 +729,14 @@ class PtzProtocol {
 
 > 注：测试里 `_isTesting` 字段当前未使用，保留以备区分真实/测试日志；如 lint 报未使用，可移除该字段及构造参数。实现时按 lint 结果处理。
 
-- [ ] **Step 4: Run test to verify it passes**
+> **实现结果**：`_isTesting` 字段已删除（lint 报 unused）。cnonce 未缓存，每请求新生成（`DigestAuth.generateCnonce()`），比计划更严。`_checkLocked` 升级为 `(body, statusCode)` 三层判定（403/429 + `<statusCode>` XML + 子串兜底），`updateConfig` 重置 `_isLocked`。方向便捷方法 `up/down/left/right` 已加。`testConnection` 为 `static`。Step 3 的代码块为草稿，以 `lib/core/ptz_protocol.dart` 实际实现为准。
+
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd camera_handheld && flutter test test/ptz_protocol_test.dart`
 Expected: PASS (7 tests)。若 `_isTesting` 报 unused，删除该字段与 `forTesting` 里的赋值，重跑。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd camera_handheld
@@ -750,7 +752,7 @@ git commit -m "feat(ptz): add PtzProtocol with continuous PTZ + zoom relay"
 - Modify: `lib/core/camera_config.dart`
 - Test: `test/camera_config_test.dart`（已有，追加）
 
-- [ ] **Step 1: Write the failing test (append to existing file)**
+- [x] **Step 1: Write the failing test (append to existing file)**
 
 在 `test/camera_config_test.dart` 末尾 `main` 内追加：
 
@@ -790,12 +792,12 @@ git commit -m "feat(ptz): add PtzProtocol with continuous PTZ + zoom relay"
 ```
 顶部加 `import 'package:camera_handheld/core/ptz_config.dart';`。
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd camera_handheld && flutter test test/camera_config_test.dart`
 Expected: FAIL — `ptz` 字段不存在 / 编译错误。
 
-- [ ] **Step 3: Modify CameraConfig**
+- [x] **Step 3: Modify CameraConfig**
 
 `lib/core/camera_config.dart`：
 - import `'ptz_config.dart'`。
@@ -807,12 +809,12 @@ Expected: FAIL — `ptz` 字段不存在 / 编译错误。
 - `==` 加 `ptz == other.ptz,`。
 - `hashCode` 把 `ptz` 并入 `Object.hash(...)`。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd camera_handheld && flutter test test/camera_config_test.dart`
 Expected: PASS（含新增 ptz group）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd camera_handheld
@@ -828,12 +830,12 @@ git commit -m "feat(ptz): embed PtzConfig in CameraConfig"
 - Modify: `lib/features/camera_state.dart`
 - Test: `test/camera_state_test.dart`（已有，参照其现有 fake protocol 风格追加）
 
-- [ ] **Step 1: Read existing camera_state_test.dart to match patterns**
+- [x] **Step 1: Read existing camera_state_test.dart to match patterns**
 
 Run: `cat camera_handheld/test/camera_state_test.dart`
 了解现有 fake protocol / 测试风格后再写。
 
-- [ ] **Step 2: Write the failing test (append)**
+- [x] **Step 2: Write the failing test (append)**
 
 追加 group：
 
@@ -956,7 +958,9 @@ http.Client _okClient() => MockClient((request) async {
 >
 > **最终决策**：CameraState 接受 `PtzProtocol?`（真实类）。联动用 try/catch 包裹。测试只验证「启用时不抛错、禁用时无影响」。联动正确性靠 PtzProtocol 单测（Task 3 已覆盖报文）+ 集成手测。这是合理测试边界。
 
-- [ ] **Step 3: Modify CameraState**
+> **实现结果**：与最终决策一致。`CameraState` 持 `PtzProtocol?`（真实类），构造参数 `ptzProtocol`（具名可选）。联动用 `.catchError` 包裹（fire-and-forget）。`updateConfig` 无条件调用 `ptzProtocol?.updateConfig(newConfig.ptz)`（不判 enabled，由 relay 方法自身判）。测试用真实 `PtzProtocol.forTesting` + MockClient，仅断言「不抛错 + zoomLevel 变化」，未用 `_FakePtzProtocol`（计划草稿里的 fake 类未采用）。
+
+- [x] **Step 3: Modify CameraState**
 
 `lib/features/camera_state.dart`：
 - import `'../core/ptz_protocol.dart'` 与 `'../core/ptz_config.dart'`（ptz_config 经 camera_config 间接已可用，但显式 import 清晰）。
@@ -978,12 +982,12 @@ http.Client _okClient() => MockClient((request) async {
   ```
 - `updateConfig`：若新 config.ptz.enabled 且 ptzProtocol != null，调用 `ptzProtocol!.updateConfig(newConfig.ptz)`。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd camera_handheld && flutter test test/camera_state_test.dart`
 Expected: PASS（含 ptz relay group）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd camera_handheld
@@ -998,7 +1002,7 @@ git commit -m "feat(ptz): relay main zoom to PtzProtocol in CameraState"
 **Files:**
 - Modify: `lib/main.dart`, `lib/app.dart`
 
-- [ ] **Step 1: Modify main.dart**
+- [x] **Step 1: Modify main.dart**
 
 在 `runApp` 前按 config.ptz.enabled 构造 `PtzProtocol`：
 
@@ -1026,7 +1030,7 @@ void main() async {
 }
 ```
 
-- [ ] **Step 2: Modify app.dart**
+- [x] **Step 2: Modify app.dart**
 
 `CameraApp` 加 `final PtzProtocol? ptzProtocol;` 字段 + 构造参数，传入 `CameraState`：
 
@@ -1057,12 +1061,12 @@ class CameraApp extends StatelessWidget {
       ...
 ```
 
-- [ ] **Step 3: Verify compile**
+- [x] **Step 3: Verify compile**
 
 Run: `cd camera_handheld && flutter analyze lib/main.dart lib/app.dart`
 Expected: 无 error。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd camera_handheld
@@ -1078,7 +1082,7 @@ git commit -m "feat(ptz): wire PtzProtocol into app assembly"
 - Create: `lib/features/ptz/ptz_controls.dart`
 - Test: `test/ptz_controls_test.dart`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```dart
 // test/ptz_controls_test.dart
@@ -1152,12 +1156,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd camera_handheld && flutter test test/ptz_controls_test.dart`
 Expected: FAIL — 文件不存在。
 
-- [ ] **Step 3: Write implementation**
+- [x] **Step 3: Write implementation**
 
 ```dart
 // lib/features/ptz/ptz_controls.dart
@@ -1488,12 +1492,12 @@ class _PtzDirButtonState extends State<_PtzDirButton> {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd camera_handheld && flutter test test/ptz_controls_test.dart`
 Expected: PASS (4 tests)。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd camera_handheld
@@ -1508,7 +1512,7 @@ git commit -m "feat(ptz): add four-direction PtzControls widget"
 **Files:**
 - Modify: `lib/features/preview/preview_screen.dart`
 
-- [ ] **Step 1: Add left-bottom PtzControls to Stack**
+- [x] **Step 1: Add left-bottom PtzControls to Stack**
 
 在 `preview_screen.dart` build 的 `Stack.children` 里，快门按钮 `Positioned` 之后追加：
 
@@ -1555,12 +1559,12 @@ import '../ptz/ptz_controls.dart';
 ```
 （`debugPrint` 来自 material.dart，已 import。`ptzProtocol` getter 需在 CameraState 暴露——Task 5 字段 `final` 已暴露。）
 
-- [ ] **Step 2: Verify compile + analyze**
+- [x] **Step 2: Verify compile + analyze**
 
 Run: `cd camera_handheld && flutter analyze lib/features/preview/preview_screen.dart`
 Expected: 无 error。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd camera_handheld
@@ -1576,11 +1580,11 @@ git commit -m "feat(ptz): mount PtzControls at preview bottom-left"
 - Modify: `lib/features/settings/settings_screen.dart`
 - Test: `test/settings_screen_test.dart`（已有，追加）
 
-- [ ] **Step 1: Read existing settings_screen_test.dart patterns**
+- [x] **Step 1: Read existing settings_screen_test.dart patterns**
 
 Run: `cat camera_handheld/test/settings_screen_test.dart`
 
-- [ ] **Step 2: Write the failing test (append)**
+- [x] **Step 2: Write the failing test (append)**
 
 追加 group（按现有测试的 pumpWidget 风格）：
 
@@ -1617,12 +1621,12 @@ Run: `cat camera_handheld/test/settings_screen_test.dart`
 ```
 顶部加必要 import（CameraConfig 已有；Switch/MaterialApp 来自 flutter_test/material）。
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `cd camera_handheld && flutter test test/settings_screen_test.dart`
 Expected: FAIL — 无「云台」段。
 
-- [ ] **Step 4: Modify settings_screen.dart**
+- [x] **Step 4: Modify settings_screen.dart**
 
 - State 加字段：
   ```dart
@@ -1727,12 +1731,12 @@ Expected: FAIL — 无「云台」段。
           ],
   ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `cd camera_handheld && flutter test test/settings_screen_test.dart`
 Expected: PASS（含 ptz section group）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd camera_handheld
@@ -1744,25 +1748,25 @@ git commit -m "feat(ptz): add gimbal config section in settings"
 
 ### Task 10: 全量验证
 
-- [ ] **Step 1: Run full test suite**
+- [x] **Step 1: Run full test suite**
 
 Run: `cd camera_handheld && flutter test`
 Expected: 全部 PASS。
 
-- [ ] **Step 2: Run analyzer**
+- [x] **Step 2: Run analyzer**
 
 Run: `cd camera_handheld && flutter analyze`
 Expected: 无 error（warning 可接受但应尽量清零）。
 
-- [ ] **Step 3: Smoke test on device/simulator**
+- [x] **Step 3: Smoke test on device/simulator**
 
 启动 app → 设置页启用云台、填 IP/密码、调速度、保存（验证云台连通测试通过）→ 返回预览 → 确认左下角出现四方向盘 → 长按方向键云台转动、松开停止 → 按主变倍 +/- 验证云台镜头同步变倍 → 关闭云台开关保存 → 确认控制盘消失。
 
-- [ ] **Step 4: Update DESIGN.md non-goal note**
+- [x] **Step 4: Update DESIGN.md non-goal note**
 
 `docs/DESIGN.md` 第 19 行「PTZ 云台控制（用户设备无云台…）」从非目标移除/改为「已实现外接云台」。可选。
 
-- [ ] **Step 5: Final commit if any doc change**
+- [x] **Step 5: Final commit if any doc change**
 
 ```bash
 cd camera_handheld

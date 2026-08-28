@@ -1,43 +1,43 @@
-import 'package:flutter/foundation.dart';
+import 'app_log.dart';
 
 import 'camera_config.dart';
 import 'camera_protocol.dart';
 
 /// Mock protocol implementation for testing without hardware.
-/// All operations print to console for debugging.
+/// All operations log via [AppLog] for debugging.
 class VirtualProtocol implements CameraProtocol {
   @override
   Future<void> capture() async {
-    debugPrint('[VirtualProtocol] capture triggered');
+    AppLog.log('[VirtualProtocol] capture triggered');
   }
 
   @override
   Future<void> zoomIn() async {
-    debugPrint('[VirtualProtocol] zoom IN');
+    AppLog.log('[VirtualProtocol] zoom IN');
   }
 
   @override
   Future<void> zoomOut() async {
-    debugPrint('[VirtualProtocol] zoom OUT');
+    AppLog.log('[VirtualProtocol] zoom OUT');
   }
 
   @override
   Future<void> zoomStop() async {
-    debugPrint('[VirtualProtocol] zoom STOP');
+    AppLog.log('[VirtualProtocol] zoom STOP');
   }
 
   @override
   Future<void> focusAt(int x, int y) async {
-    debugPrint('[VirtualProtocol] focusAt: ($x, $y)');
+    AppLog.log('[VirtualProtocol] focusAt: ($x, $y)');
   }
 
   @override
   void updateConfig(CameraConfig config) {
-    debugPrint('[VirtualProtocol] config updated: ${config.ip}');
+    AppLog.log('[VirtualProtocol] config updated: ${config.ip}');
   }
 
   @override
   void dispose() {
-    debugPrint('[VirtualProtocol] disposed');
+    AppLog.log('[VirtualProtocol] disposed');
   }
 }

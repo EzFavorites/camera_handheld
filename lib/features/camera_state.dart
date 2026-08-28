@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../core/app_log.dart';
 import '../core/camera_config.dart';
 import '../core/camera_protocol.dart';
 import '../core/ptz_protocol.dart';
@@ -45,7 +46,7 @@ class CameraState extends ChangeNotifier {
     try {
       await protocol.capture();
     } catch (e) {
-      debugPrint('[CameraState] capture error: $e');
+      AppLog.log('[CameraState] capture error: $e');
     } finally {
       _isCapturing = false;
       notifyListeners();
@@ -56,19 +57,19 @@ class CameraState extends ChangeNotifier {
     _zoomLevel = (_zoomLevel + 0.1).clamp(1.0, 32.0);
     notifyListeners();
     // Fire-and-forget: command queue handles serialization, errors logged not thrown
-    protocol.zoomIn().catchError((e) => debugPrint('[CameraState] zoomIn error: $e'));
+    protocol.zoomIn().catchError((e) => AppLog.log('[CameraState] zoomIn error: $e'));
     _relayPtzZoom(1);
   }
 
   Future<void> zoomOut() async {
     _zoomLevel = (_zoomLevel - 0.1).clamp(1.0, 32.0);
     notifyListeners();
-    protocol.zoomOut().catchError((e) => debugPrint('[CameraState] zoomOut error: $e'));
+    protocol.zoomOut().catchError((e) => AppLog.log('[CameraState] zoomOut error: $e'));
     _relayPtzZoom(-1);
   }
 
   Future<void> zoomStop() async {
-    protocol.zoomStop().catchError((e) => debugPrint('[CameraState] zoomStop error: $e'));
+    protocol.zoomStop().catchError((e) => AppLog.log('[CameraState] zoomStop error: $e'));
     _relayPtzStop();
   }
 
@@ -78,13 +79,13 @@ class CameraState extends ChangeNotifier {
     final ptz = ptzProtocol;
     if (ptz == null || !config.ptz.enabled) return;
     final f = dir > 0 ? ptz.zoomIn() : ptz.zoomOut();
-    f.catchError((e) => debugPrint('[CameraState] ptz zoom relay error: $e'));
+    f.catchError((e) => AppLog.log('[CameraState] ptz zoom relay error: $e'));
   }
 
   void _relayPtzStop() {
     final ptz = ptzProtocol;
     if (ptz == null || !config.ptz.enabled) return;
-    ptz.zoomStop().catchError((e) => debugPrint('[CameraState] ptz stop relay error: $e'));
+    ptz.zoomStop().catchError((e) => AppLog.log('[CameraState] ptz stop relay error: $e'));
   }
 
   Future<void> focusAt(int x, int y) async {
@@ -95,7 +96,7 @@ class CameraState extends ChangeNotifier {
     try {
       await protocol.focusAt(_focusX, _focusY);
     } catch (e) {
-      debugPrint('[CameraState] focusAt error: $e');
+      AppLog.log('[CameraState] focusAt error: $e');
     }
   }
 

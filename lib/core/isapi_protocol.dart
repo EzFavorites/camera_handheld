@@ -149,7 +149,7 @@ class IsapiProtocol implements CameraProtocol {
       final req2 = http.Request(method, uri);
       if (body != null) req2.body = body;
       req2.headers['Content-Type'] = contentType;
-      req2.headers['Authorization'] = auth.toString();
+      req2.headers['Authorization'] = auth;
       final resp2 = await _client.send(req2).timeout(const Duration(seconds: 5));
       final body2 = await resp2.stream.bytesToString();
 

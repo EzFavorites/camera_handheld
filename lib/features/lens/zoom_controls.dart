@@ -82,6 +82,8 @@ class _ZoomControlsState extends State<ZoomControls> {
                 height: 40,
                 color: Colors.white.withValues(alpha: 0.15),
               ),
+              // Track height 40, dot 6px. top range 0..(40-6)=34 so the dot
+              // sits flush at the bottom when fully zoomed in.
               Positioned(
                 top: trackPercent / 100 * 34,
                 child: Container(

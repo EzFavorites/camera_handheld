@@ -142,7 +142,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
         return;
       }
       _reconnectPolicy.reset();
-      _reconnecting =  false;
+      _reconnecting = false;
       state.setConnected();
       state.setStreamInfo(
         state.config.useSubStream ? '子码流' : '主码流',
@@ -319,7 +319,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                       },
                       onStop: () {
                         state.ptzProtocol?.stop().catchError((e) {
-                          debugPrint('[Preview] ptz stop error: $e');
+                          AppLog.log('[Preview] ptz stop error: $e');
                         });
                       },
                     );
